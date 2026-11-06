@@ -1,0 +1,8 @@
+{
+  "name": "TS Protocol - Decentralized AMM & Liquidity Provisioning Engine",
+  "description": "Decentralized automated liquidity provisioning protocols, real-time AMM trading bot visualizer, and non-custodial yield analytics on BNB Chain.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
