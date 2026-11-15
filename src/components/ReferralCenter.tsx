@@ -353,7 +353,7 @@ Telegram Support: ${CONTRACTS.TELEGRAM_COMMUNITY}
                 </span>
                 <span className="px-2 py-1 rounded-lg bg-emerald-950/90 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold backdrop-blur-sm flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  <span>4% DAILY YIELD POOL</span>
+                  <span>$10 → $16 IN 5 DAYS POOL</span>
                 </span>
               </div>
 
@@ -461,7 +461,7 @@ Telegram Support: ${CONTRACTS.TELEGRAM_COMMUNITY}
               <span className="text-[11px] text-zinc-400 font-semibold block">1-Click Instant Social Sharing:</span>
               <div className="flex flex-wrap items-center gap-2">
                 <a
-                  href={`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join TS BOT on BNB Chain! Automated liquidity provisioning, 4% daily yield protocol, and 4-tier affiliate rewards. Use my Referral ID: ' + referralCode)}`}
+                  href={`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join TS BOT on BNB Chain! Automated liquidity provisioning, $10 package mines $16 in 5 days (32%/day), and 4-tier affiliate rewards. Use my Referral ID: ' + referralCode)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-950/60 hover:bg-sky-900/60 text-sky-400 border border-sky-800/50 text-xs font-medium transition-colors"
@@ -867,12 +867,23 @@ Telegram Support: ${CONTRACTS.TELEGRAM_COMMUNITY}
                           +{formatUSD(user.commissionEarnedUsd)}
                         </td>
                         <td className="py-3 px-3">
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                            user.status === 'ACTIVE' ? 'text-emerald-400' : 'text-zinc-500'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'ACTIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`}></span>
-                            <span>{user.status}</span>
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${
+                              user.status === 'ACTIVE' ? 'text-emerald-400' : 'text-amber-400'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'ACTIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+                              <span>{user.status === 'ACTIVE' ? 'ACTIVE' : 'REGISTERED'}</span>
+                            </span>
+                            {user.rechargedAmountUsd ? (
+                              <span className="text-[10px] text-amber-300 font-mono font-bold">
+                                Recharged ${user.rechargedAmountUsd.toFixed(2)} Package
+                              </span>
+                            ) : user.note ? (
+                              <span className="text-[10px] text-zinc-400 font-mono">
+                                {user.note}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -968,7 +979,7 @@ Telegram Support: ${CONTRACTS.TELEGRAM_COMMUNITY}
                 </div>
                 <div className="absolute top-3 right-3 bg-emerald-950/90 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold px-2.5 py-1 rounded-xl shadow-lg backdrop-blur-md flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  <span>4% DAILY YIELD POOL</span>
+                  <span>$10 → $16 IN 5 DAYS POOL</span>
                 </div>
               </div>
 

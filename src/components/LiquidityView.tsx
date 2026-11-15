@@ -21,9 +21,10 @@ import { CONTRACTS, formatUSD, formatNumber, shortenAddress } from '../data/cons
 
 interface LiquidityViewProps {
   onGoToReferrals?: () => void;
+  onGoToStakePools?: () => void;
 }
 
-export const LiquidityView: React.FC<LiquidityViewProps> = ({ onGoToReferrals }) => {
+export const LiquidityView: React.FC<LiquidityViewProps> = ({ onGoToReferrals, onGoToStakePools }) => {
   const { 
     pools, 
     selectedPool, 
@@ -214,7 +215,8 @@ export const LiquidityView: React.FC<LiquidityViewProps> = ({ onGoToReferrals })
       )}
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-zinc-800 space-x-4 text-xs font-semibold">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800">
+      <div className="flex space-x-4 text-xs font-semibold">
         <button
           onClick={() => setActiveTab('tiers')}
           className={`pb-3 flex items-center gap-1.5 transition-all relative ${
@@ -279,6 +281,18 @@ export const LiquidityView: React.FC<LiquidityViewProps> = ({ onGoToReferrals })
           <span>Affiliate & Rebates (4 Tiers)</span>
           {activeTab === 'affiliate' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400"></div>}
         </button>
+      </div>
+
+      {onGoToStakePools && (
+        <button
+          type="button"
+          onClick={onGoToStakePools}
+          className="mb-2 px-3.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+        >
+          <span>Explore Cardamom & Real-Money Stake Pools</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      )}
       </div>
 
       {/* Tab 1: Packages ($10, $30, $50, $100, $200, $500, $1000) */}

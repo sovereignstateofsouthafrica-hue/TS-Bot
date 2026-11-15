@@ -3,6 +3,7 @@ import { ProtocolProvider, useProtocol } from './context/ProtocolContext';
 import { Navbar } from './components/Navbar';
 import { HeaderStats } from './components/HeaderStats';
 import { DashboardView } from './components/DashboardView';
+import { BinanceMiningCloudView } from './components/BinanceMiningCloudView';
 import { TradingBotView } from './components/TradingBotView';
 import { LiquidityView } from './components/LiquidityView';
 import { CalculatorView } from './components/CalculatorView';
@@ -15,7 +16,14 @@ import { AlertsLedgerModal } from './components/AlertsLedgerModal';
 import { AuthModal } from './components/AuthModal';
 import { DownloadAppModal } from './components/DownloadAppModal';
 import { AlertToast } from './components/AlertToast';
+import { MiningMachinesSection } from './components/MiningMachinesSection';
+import { BuyMachineModal } from './components/BuyMachineModal';
+import { AirdropsMemeNftView } from './components/AirdropsMemeNftView';
+import { PaycheckNavigatorView } from './components/PaycheckNavigatorView';
+import { StakePoolsView } from './components/StakePoolsView';
 import { Footer } from './components/Footer';
+import { MiningMachinePackage } from './types';
+import { CONTRACTS } from './data/constants';
 import { Gift, UserPlus, LogIn, X } from 'lucide-react';
 
 export function AppContent() {
@@ -29,6 +37,20 @@ export function AppContent() {
   const [authModalMode, setAuthModalMode] = useState<'register' | 'login' | 'recover'>('register');
   const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(false);
   const [dismissInviteBanner, setDismissInviteBanner] = useState<boolean>(false);
+  const [selectedMachinePackage, setSelectedMachinePackage] = useState<MiningMachinePackage | null>(null);
+  const [buyModalOpen, setBuyModalOpen] = useState<boolean>(false);
+  const [paycheckAddress, setPaycheckAddress] = useState<string>(CONTRACTS.RECHARGE_ROUTER_DEFI);
+  const [withdrawalPrefillAddress, setWithdrawalPrefillAddress] = useState<string | undefined>(undefined);
+
+  const navigateToPaycheck = (address: string = CONTRACTS.RECHARGE_ROUTER_DEFI) => {
+    setPaycheckAddress(address);
+    setActiveTab('paycheck');
+  };
+
+  const openWithdrawalForAddress = (address?: string) => {
+    setWithdrawalPrefillAddress(address);
+    setWithdrawalModalOpen(true);
+  };
 
   const handleOpenAuth = (mode: 'register' | 'login' | 'recover' = 'register') => {
     setAuthModalMode(mode);
@@ -97,9 +119,36 @@ export function AppContent() {
           <DashboardView 
             onGoToBot={() => setActiveTab('bot')} 
             onGoToLiquidity={() => setActiveTab('liquidity')} 
+            onGoToMining={() => setActiveTab('mining')}
+            onGoToAirdrops={() => setActiveTab('airdrops')}
+            onGoToStakePools={() => setActiveTab('stakepools')}
+            onGoToPaycheck={navigateToPaycheck}
             onOpenRecharge={() => setRechargeModalOpen(true)}
-            onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
+            onOpenWithdrawal={() => openWithdrawalForAddress()}
             onOpenAuth={handleOpenAuth}
+          />
+        )}
+        {activeTab === 'machines' && (
+          <MiningMachinesSection 
+            id="ts-mining-machines-tab"
+            onBuyPackage={(pkg) => {
+              setSelectedMachinePackage(pkg);
+              setBuyModalOpen(true);
+            }}
+            onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
+          />
+        )}
+        {activeTab === 'mining' && (
+          <BinanceMiningCloudView
+            onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
+            onOpenRecharge={() => setRechargeModalOpen(true)}
+            onGoToAirdrops={() => setActiveTab('airdrops')}
+          />
+        )}
+        {activeTab === 'airdrops' && (
+          <AirdropsMemeNftView
+            onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
+            onGoToStakePools={() => setActiveTab('stakepools')}
           />
         )}
         {activeTab === 'bot' && (
@@ -108,11 +157,42 @@ export function AppContent() {
             onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
           />
         )}
-        {activeTab === 'liquidity' && <LiquidityView onGoToReferrals={() => setActiveTab('referrals')} />}
+        {activeTab === 'liquidity' && (
+          <LiquidityView
+            onGoToReferrals={() => setActiveTab('referrals')}
+            onGoToStakePools={() => setActiveTab('stakepools')}
+          />
+        )}
+        {activeTab === 'stakepools' && (
+          <StakePoolsView
+            onOpenWithdrawal={() => openWithdrawalForAddress()}
+            onGoToCreateNft={() => setActiveTab('airdrops')}
+          />
+        )}
         {activeTab === 'referrals' && <ReferralCenter onOpenAuthModal={handleOpenAuth} />}
+        {activeTab === 'paycheck' && (
+          <PaycheckNavigatorView
+            key={paycheckAddress}
+            initialAddress={paycheckAddress}
+            onWithdrawToAddress={(addr) => openWithdrawalForAddress(addr)}
+            onOpenRecharge={() => setRechargeModalOpen(true)}
+          />
+        )}
         {activeTab === 'calculator' && <CalculatorView />}
-        {activeTab === 'statements' && <FinancialStatementsView />}
+        {activeTab === 'statements' && (
+          <FinancialStatementsView onGoToPaycheck={navigateToPaycheck} />
+        )}
       </main>
+
+      {/* Buy Machine Package Modal for dedicated tab */}
+      <BuyMachineModal
+        isOpen={buyModalOpen}
+        onClose={() => {
+          setBuyModalOpen(false);
+          setSelectedMachinePackage(null);
+        }}
+        selectedPackage={selectedMachinePackage}
+      />
 
       {/* Web3 Wallet Modal */}
       <WalletModal 
@@ -129,7 +209,11 @@ export function AppContent() {
       {/* Withdrawal Crypto BNB Modal */}
       <WithdrawalModal
         isOpen={withdrawalModalOpen}
-        onClose={() => setWithdrawalModalOpen(false)}
+        onClose={() => {
+          setWithdrawalModalOpen(false);
+          setWithdrawalPrefillAddress(undefined);
+        }}
+        defaultRecipientAddress={withdrawalPrefillAddress}
       />
 
       {/* Crypto Alerts History Log Modal */}

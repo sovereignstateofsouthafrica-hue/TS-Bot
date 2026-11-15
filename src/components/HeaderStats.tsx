@@ -4,7 +4,7 @@ import { useProtocol } from '../context/ProtocolContext';
 import { formatUSD, formatNumber } from '../data/constants';
 
 export const HeaderStats: React.FC = () => {
-  const { pools, botConfig, hasRecharged, rechargeBalance } = useProtocol();
+  const { pools, botConfig, hasRecharged, rechargeBalance, binanceCloud } = useProtocol();
 
   const totalTvl = pools.reduce((acc, p) => acc + p.tvlUsd, 0);
   const totalVolume24h = pools.reduce((acc, p) => acc + p.volume24h, 0);
@@ -28,7 +28,7 @@ export const HeaderStats: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-3 font-mono text-[11px]">
+          <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
             <span className="text-zinc-400">
               TS Price: <span className="text-white font-bold">${tsPrice.toFixed(2)}</span>
               <span className={`ml-1 font-semibold ${tsChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -40,8 +40,13 @@ export const HeaderStats: React.FC = () => {
               BNB Price: <span className="text-amber-400 font-bold">$614.50</span>
             </span>
             <span className="text-zinc-500">•</span>
+            <span className="text-amber-300 font-bold flex items-center gap-1">
+              <span>🟡 Binance Cloud:</span>
+              <span className="text-white">{binanceCloud.connected ? `${binanceCloud.hashrateTh.toFixed(1)} TH/s` : 'Standby'}</span>
+            </span>
+            <span className="text-zinc-500">•</span>
             <span className="text-amber-300 font-bold">
-              Recharge Bal: <span className="text-white">{rechargeBalance.toFixed(2)} BNB</span>
+              Recharge Bal: <span className="text-white">{rechargeBalance.toFixed(4)} BNB</span>
             </span>
           </div>
         </div>
@@ -101,7 +106,7 @@ export const HeaderStats: React.FC = () => {
               {hasRecharged ? (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  <span className="text-emerald-400">Arbitrage & 4% Yield Active</span>
+                  <span className="text-emerald-400">Arbitrage & 32%/d ($16/5d) Active</span>
                 </>
               ) : (
                 <span className="text-zinc-500">Standby • Starts after Recharge</span>

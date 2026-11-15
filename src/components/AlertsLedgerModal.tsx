@@ -104,6 +104,11 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
                       {alert.amountBnb.toFixed(4)} BNB
                     </span>
                     <span className="text-zinc-500 font-mono">({formatUSD(alert.amountUsd)})</span>
+                    {alert.withdrawalChargeUsd && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono">
+                        +${alert.withdrawalChargeUsd.toFixed(2)} Fee
+                      </span>
+                    )}
                   </div>
 
                   <span className="text-[11px] text-zinc-500 font-mono">

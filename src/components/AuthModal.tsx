@@ -155,7 +155,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
             <div className="absolute bottom-1.5 left-2.5 right-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-300">
               <span className="text-zinc-400">BNB Chain | Automated System</span>
-              <span className="text-emerald-400 font-bold">4% Daily Yield</span>
+              <span className="text-emerald-400 font-bold">$10 → $16 in 5 Days</span>
             </div>
           </div>
         </div>

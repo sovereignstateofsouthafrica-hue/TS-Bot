@@ -14,8 +14,12 @@ import {
 import { useProtocol } from '../context/ProtocolContext';
 import { formatUSD, formatNumber, shortenAddress, CONTRACTS } from '../data/constants';
 
-export const FinancialStatementsView: React.FC = () => {
-  const { financialMetrics, pools, tradeHistory, currentBlock } = useProtocol();
+interface FinancialStatementsViewProps {
+  onGoToPaycheck?: (address?: string) => void;
+}
+
+export const FinancialStatementsView: React.FC<FinancialStatementsViewProps> = ({ onGoToPaycheck }) => {
+  const { financialMetrics, pools, tradeHistory } = useProtocol();
   const [downloadNotice, setDownloadNotice] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -60,13 +64,24 @@ export const FinancialStatementsView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold shadow transition-all self-start sm:self-auto"
-        >
-          <Download className="w-4 h-4 text-amber-400" />
-          <span>Export CSV Statement</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {onGoToPaycheck && (
+            <button
+              type="button"
+              onClick={() => onGoToPaycheck(CONTRACTS.RECHARGE_ROUTER_DEFI)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black shadow transition-all cursor-pointer"
+            >
+              <span>Paycheck ({shortenAddress(CONTRACTS.RECHARGE_ROUTER_DEFI)})</span>
+            </button>
+          )}
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold shadow transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-amber-400" />
+            <span>Export CSV Statement</span>
+          </button>
+        </div>
       </div>
 
       {downloadNotice && (

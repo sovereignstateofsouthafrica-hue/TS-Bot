@@ -103,6 +103,9 @@ export interface CryptoAlert {
   recipientEmail: string;
   blockNumber: number;
   note?: string;
+  withdrawalChargeUsd?: number;
+  withdrawalChargeBnb?: number;
+  totalDebitedBnb?: number;
 }
 
 export interface ReferralUser {
@@ -113,7 +116,9 @@ export interface ReferralUser {
   tradingVolumeUsd: number;
   commissionEarnedBnb: number;
   commissionEarnedUsd: number;
-  status: 'ACTIVE' | 'IDLE';
+  status: 'ACTIVE' | 'IDLE' | 'REGISTERED';
+  rechargedAmountUsd?: number;
+  note?: string;
 }
 
 export interface ReferralLevelStats {
@@ -138,5 +143,198 @@ export interface AuthUser {
   isRegistered: boolean;
 }
 
+export interface CloudMiningShare {
+  id: string;
+  timestamp: number;
+  blockNumber: number;
+  workerId: string;
+  difficulty: string;
+  hashrateTh: number;
+  shareStatus: 'ACCEPTED' | 'VALIDATED' | 'BOOSTED';
+  rewardBnb: number;
+  nonce: string;
+}
 
+export interface BinanceMiningCloudState {
+  connected: boolean;
+  poolEndpoint: string;
+  region: string;
+  hashrateTh: number;
+  baseHashrateTh: number;
+  multiplier: number;
+  activeWorkerId: string;
+  acceptedShares: number;
+  rejectedShares: number;
+  efficiencyPct: number;
+  lastBoostTimestamp: number;
+  isBoostActive: boolean;
+  totalMinedFromCloudBnb: number;
+}
+
+export interface MiningMachinePackage {
+  id: string;
+  name: string;
+  model: string;
+  tier: string;
+  priceUsd: number;
+  hashrateTh: number;
+  dailyYieldPct: number;
+  dailyBnbReward: number;
+  powerConsumptionW: number;
+  cooling: string;
+  efficiencyJTh: number;
+  featured?: boolean;
+  image: string;
+  badge?: string;
+  description: string;
+  specs: {
+    dimensions: string;
+    weight: string;
+    connection: string;
+    warranty: string;
+  };
+}
+
+export interface ConnectedMachine {
+  id: string;
+  packageId: string;
+  model: string;
+  name: string;
+  tier: string;
+  priceUsd: number;
+  hashrateTh: number;
+  dailyYieldPct: number;
+  purchasedAt: number;
+  status: 'ONLINE' | 'OVERCLOCKED' | 'MAINTENANCE';
+  totalMinedBnb: number;
+  powerW: number;
+  temperatureC: number;
+  serialNumber: string;
+  irdLinked: boolean;
+  irdWalletAddress: string;
+  irdFedMinesBnb: number;
+  lastIrdFeedTimestamp?: number;
+}
+
+export interface IrdFeedEvent {
+  id: string;
+  timestamp: number;
+  machineId?: string;
+  machineName?: string;
+  amountBnb: number;
+  amountUsd: number;
+  source: 'MINING_ROBOT' | 'HARDWARE_RIG' | 'CLOUD_CLUSTER';
+  targetIrdWallet: string;
+  txHash: string;
+  status: 'FED_TO_IRD' | 'SYNCED' | 'CONFIRMED';
+  blockNumber: number;
+  note?: string;
+}
+
+export interface CloudAirdropToken {
+  id: string;
+  symbol: string;
+  name: string;
+  category: 'CLOUD_AIRDROP' | 'MEME_TOKEN';
+  network: string;
+  contractAddress: string;
+  claimableAmount: number;
+  claimedAmount: number;
+  priceUsd: number;
+  miningBoostPct: number;
+  dailyFeedUsd: number;
+  isFeedingMining: boolean;
+  status: 'CLAIMABLE' | 'CLAIMED' | 'FEEDING_MINING';
+  totalFedBnb: number;
+  lastClaimedAt?: number;
+  description: string;
+}
+
+export interface MiningNftAsset {
+  id: string;
+  tokenId: string;
+  name: string;
+  collection: string;
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
+  image: string;
+  floorValueUsd: number;
+  miningProfitMultiplier: number;
+  dailyFeedUsd: number;
+  owned: boolean;
+  isStakedFeeding: boolean;
+  totalFedBnb: number;
+  mintCostBnb: number;
+  connectedPoolIds?: string[];
+  stakePoolApyBoostPct?: number;
+  editionLabel?: string;
+  description: string;
+}
+
+export interface MiningProfitFeedEvent {
+  id: string;
+  timestamp: number;
+  sourceType: 'CLOUD_AIRDROP' | 'MEME_TOKEN' | 'NFT_RELIC' | 'MINING_FEED' | 'AD_REVENUE';
+  sourceName: string;
+  symbolOrId: string;
+  amountBnb: number;
+  amountUsd: number;
+  txHash: string;
+  blockNumber: number;
+}
+
+export interface AdCampaignSlot {
+  id: string;
+  title: string;
+  advertiser: string;
+  placement: 'NFT_SHOWCASE' | 'STAKE_POOL_SPONSOR' | 'MINING_CLOUD' | 'DASHBOARD_BANNER';
+  connectedTarget: 'TS_NFT' | 'STAKE_POOLS' | 'MINING_PROFITS';
+  dailyRevenueUsd: number;
+  impressions24h: number;
+  ctrPct: number;
+  connected: boolean;
+  targetAddress: string;
+  totalEarnedUsd: number;
+  description: string;
+}
+
+export type StakePoolCategory =
+  | 'COMMODITY_RWA'
+  | 'TREASURY_MONEY'
+  | 'REAL_ESTATE_RWA'
+  | 'CRYPTO_STAKE';
+
+export interface StakePool {
+  id: string;
+  name: string;
+  symbol: string;
+  category: StakePoolCategory;
+  assetBacking: string;
+  custodian: string;
+  settlementCurrency: 'USD' | 'BNB' | 'USDT';
+  apyPct: number;
+  dailyRatePct: number;
+  tvlUsd: number;
+  minStakeUsd: number;
+  lockPeriodDays: number;
+  userStakedUsd: number;
+  userStakedBnb: number;
+  accruedRewardsUsd: number;
+  accruedRewardsBnb: number;
+  feedToMiningProfits: boolean;
+  totalYieldPaidUsd: number;
+  description: string;
+}
+
+export interface StakePoolEvent {
+  id: string;
+  timestamp: number;
+  poolId: string;
+  poolName: string;
+  action: 'STAKE' | 'UNSTAKE' | 'CLAIM_REWARD' | 'FEED_MINING';
+  amountUsd: number;
+  amountBnb: number;
+  paymentMethod: 'BNB' | 'USDT' | 'RECHARGE';
+  txHash: string;
+  blockNumber: number;
+}
 

@@ -22,8 +22,8 @@ interface RechargeModalProps {
 export const RechargeModal: React.FC<RechargeModalProps> = ({ isOpen, onClose }) => {
   const { processRechargeBnb, wallet } = useProtocol();
 
-  const [bnbAmount, setBnbAmount] = useState<string>('0.1627'); // ~$100 default
-  const [selectedUsdPackage, setSelectedUsdPackage] = useState<number>(100);
+  const [bnbAmount, setBnbAmount] = useState<string>('0.0163'); // Package 1: $10 Mining Package
+  const [selectedUsdPackage, setSelectedUsdPackage] = useState<number>(10);
   const [txHashInput, setTxHashInput] = useState<string>('');
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,7 +109,7 @@ export const RechargeModal: React.FC<RechargeModalProps> = ({ isOpen, onClose })
               </div>
               <h4 className="text-base font-bold text-white">Recharge Confirmed & Activated!</h4>
               <p className="text-emerald-300 font-sans text-xs">
-                Your deposit of <span className="font-bold">{receipt.amountBnb.toFixed(4)} BNB</span> ({formatUSD(receipt.amountUsd)}) was successfully credited to your Dashboard Recharge Balance. Active trading and 4% daily mining figures are now live!
+                Your deposit of <span className="font-bold">{receipt.amountBnb.toFixed(4)} BNB</span> ({formatUSD(receipt.amountUsd)}) was successfully credited to your Dashboard Recharge Balance. Active trading and 32%/day mining ($16.00 in 5 days per $10) are now live!
               </p>
             </div>
 
@@ -131,7 +131,7 @@ export const RechargeModal: React.FC<RechargeModalProps> = ({ isOpen, onClose })
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Dashboard Status:
                 </span>
-                <span>Active 4% Daily Yield Mining</span>
+                <span>Active 32%/Day ($16 in 5 Days)</span>
               </div>
             </div>
 
@@ -234,10 +234,11 @@ export const RechargeModal: React.FC<RechargeModalProps> = ({ isOpen, onClose })
             {/* Dashboard Recharge Balance Activation Banner */}
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-start gap-2">
               <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Dashboard Recharge Balance Activation:</span>
-                <p className="text-zinc-300 mt-0.5">
-                  Confirming this recharge credits your Recharge Balance on the Dashboard and activates automated TS BNB 4% daily yield trading.
+              <div className="space-y-1">
+                <span className="font-bold">5-Day Mining Projection ($10 Package → $16.00 in 5 Days):</span>
+                <p className="text-zinc-300">
+                  Daily Yield: <strong className="text-emerald-400 font-mono">+{formatUSD(((parseFloat(bnbAmount) || 0) * bnbPrice) * 0.32)}/day</strong> (32%/day) · 5-Day Mined Total:{' '}
+                  <strong className="text-amber-300 font-mono">{formatUSD(((parseFloat(bnbAmount) || 0) * bnbPrice) * 1.60)}</strong>
                 </p>
               </div>
             </div>

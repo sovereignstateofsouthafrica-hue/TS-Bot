@@ -36,9 +36,14 @@ export const AlertToast: React.FC = () => {
             </button>
           </div>
 
-          <div className="text-sm font-bold text-white flex items-baseline gap-2">
+          <div className="text-sm font-bold text-white flex flex-wrap items-baseline gap-2">
             <span>{activeAlertToast.amountBnb.toFixed(4)} BNB</span>
             <span className="text-xs text-zinc-400 font-mono">({formatUSD(activeAlertToast.amountUsd)})</span>
+            {activeAlertToast.withdrawalChargeUsd && (
+              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono">
+                Fee: ${activeAlertToast.withdrawalChargeUsd.toFixed(2)} USD
+              </span>
+            )}
           </div>
 
           <p className="text-xs text-zinc-300 font-sans">

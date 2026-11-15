@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
 import { CONTRACTS, formatUSD, shortenAddress } from '../data/constants';
+import { IrdMiningRobotFeedSection } from './IrdMiningRobotFeedSection';
 
 interface TradingBotViewProps {
   onOpenRecharge?: () => void;
@@ -63,7 +64,7 @@ export const TradingBotView: React.FC<TradingBotViewProps> = ({ onOpenRecharge, 
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
             <div>
               <strong className="text-white block font-semibold">No Active Figures of Trading Before Recharging</strong>
-              <span className="text-zinc-400">Active trading, AMM arbitrage, and 4% daily mining figures start after confirming your BNB recharge package.</span>
+              <span className="text-zinc-400">Active trading, AMM arbitrage, and 32%/day mining ($10 package mines $16 in 5 days) start after confirming your BNB recharge package.</span>
             </div>
           </div>
           {onOpenRecharge && (
@@ -544,6 +545,9 @@ export const TradingBotView: React.FC<TradingBotViewProps> = ({ onOpenRecharge, 
           </div>
         )}
       </div>
+
+      {/* Direct Link & Feed Bridge: Mining Robot Feed the Mines to IRD */}
+      <IrdMiningRobotFeedSection onOpenWithdrawal={onOpenWithdrawal} />
     </div>
   );
 };

@@ -12,14 +12,26 @@ import {
   ShieldCheck,
   Zap,
   UserPlus,
-  LogIn
+  LogIn,
+  Sparkles,
+  Cpu,
+  ArrowDown,
+  Gift,
+  Landmark
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
-import { formatUSD, formatNumber, shortenAddress, calculateAmountOut, CONTRACTS } from '../data/constants';
+import { formatUSD, formatNumber, shortenAddress, calculateAmountOut, CONTRACTS, WITHDRAWAL_RULES, MINING_PACKAGE_RULES, MINING_FEED_RULES } from '../data/constants';
+import { MiningMachinePackage } from '../types';
+import { MiningMachinesSection } from './MiningMachinesSection';
+import { BuyMachineModal } from './BuyMachineModal';
 
 interface DashboardViewProps {
   onGoToBot: () => void;
   onGoToLiquidity: () => void;
+  onGoToMining?: () => void;
+  onGoToAirdrops?: () => void;
+  onGoToStakePools?: () => void;
+  onGoToPaycheck?: (address?: string) => void;
   onOpenRecharge?: () => void;
   onOpenWithdrawal?: () => void;
   onOpenAuth?: (mode: 'register' | 'login') => void;
@@ -28,6 +40,10 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({ 
   onGoToBot, 
   onGoToLiquidity,
+  onGoToMining,
+  onGoToAirdrops,
+  onGoToStakePools,
+  onGoToPaycheck,
   onOpenRecharge,
   onOpenWithdrawal,
   onOpenAuth 
@@ -43,8 +59,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     rechargeBalanceUsd,
     hasRecharged,
     accumulatedMiningYieldBnb,
-    claimMiningYield
+    claimMiningYield,
+    addMinedYieldBnb,
+    binanceCloud,
+    boostMiningEngine,
+    cloudAirdropTokens,
+    miningNfts,
+    stakePools,
+    adSlots,
+    miningFeedAccumulatedUsd,
+    miningFeedEnabled,
   } = useProtocol();
+
+  const totalStakedRwaUsd = stakePools.reduce((sum, p) => sum + p.userStakedUsd, 0);
+
+  const activeFeedTokens = cloudAirdropTokens.filter((t) => t.isFeedingMining);
+  const activeFeedNfts = miningNfts.filter((n) => n.owned && n.isStakedFeeding);
+  const activeAds = adSlots.filter((a) => a.connected);
+  const dailyAssetFeedUsd =
+    (miningFeedEnabled ? MINING_FEED_RULES.DAILY_ACCUMULATION_USD : 0) +
+    activeFeedTokens.reduce((sum, t) => sum + t.dailyFeedUsd, 0) +
+    activeFeedNfts.reduce((sum, n) => sum + n.dailyFeedUsd, 0) +
+    activeAds.reduce((sum, a) => sum + a.dailyRevenueUsd, 0);
 
   // Swap State
   const [fromToken, setFromToken] = useState<'TS' | 'BNB'>('BNB');
@@ -52,6 +88,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [swapSuccess, setSwapSuccess] = useState<string | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
+
+  // Second Generation TS Mining Machine Package Purchase State
+  const [selectedMachinePackage, setSelectedMachinePackage] = useState<MiningMachinePackage | null>(null);
+  const [buyModalOpen, setBuyModalOpen] = useState(false);
 
   const handleClaimMining = () => {
     const res = claimMiningYield();
@@ -103,16 +143,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${
                 hasRecharged
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
                   : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
               }`}>
                 <span className={`w-2 h-2 rounded-full ${hasRecharged ? 'bg-emerald-400 animate-ping' : 'bg-zinc-500'}`}></span>
-                {hasRecharged ? 'ACTIVE MINING • 4.00% DAILY YIELD PROTOCOL' : 'AWAITING RECHARGE • TRADING FIGURES INACTIVE'}
+                {hasRecharged 
+                  ? 'PACKAGE 1 ($10 RECHARGED) • MINES $16.00 IN 5 DAYS (32%/DAY)' 
+                  : 'AWAITING RECHARGE • TRADING FIGURES INACTIVE'}
               </span>
               <span className="text-zinc-600 text-xs hidden sm:inline">•</span>
-              <span className="text-zinc-400 text-xs font-mono hidden sm:inline">
-                Router: {shortenAddress(CONTRACTS.RECHARGE_ROUTER_DEFI)}
+              <span className="text-amber-400 text-xs font-mono font-semibold hidden sm:inline">
+                Package 1: $10 Mines $16 in 5 Days
               </span>
+              <span className="text-zinc-600 text-xs hidden sm:inline">•</span>
+              {onGoToPaycheck ? (
+                <button
+                  type="button"
+                  onClick={() => onGoToPaycheck(CONTRACTS.RECHARGE_ROUTER_DEFI)}
+                  className="text-zinc-300 hover:text-amber-400 text-xs font-mono hidden sm:inline-flex items-center gap-1 underline-offset-4 hover:underline cursor-pointer"
+                  title="Navigate paycheck for 0xdB19b0785d1BA051ECdbC721c86e0828ACf43Db0"
+                >
+                  <span>Paycheck: {shortenAddress(CONTRACTS.RECHARGE_ROUTER_DEFI)}</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              ) : (
+                <span className="text-zinc-400 text-xs font-mono hidden sm:inline">
+                  Router: {shortenAddress(CONTRACTS.RECHARGE_ROUTER_DEFI)}
+                </span>
+              )}
             </div>
 
             <div>
@@ -126,28 +184,110 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-base sm:text-lg font-bold text-zinc-400 font-mono">
                   ({formatUSD(rechargeBalanceUsd)})
                 </div>
+                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs font-mono font-bold">
+                  Package 1 ($10 → $16 in 5d) Active
+                </span>
               </div>
             </div>
 
             {hasRecharged ? (
-              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-zinc-300 font-mono">
-                <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800">
-                  <span className="text-zinc-500">4% Daily Yield:</span>
-                  <span className="text-emerald-400 font-bold">
-                    +{(rechargeBalance * 0.04).toFixed(4)} BNB/day ({formatUSD(rechargeBalance * 0.04 * 614.5)})
-                  </span>
+              <div className="space-y-2 pt-1">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-300 font-mono">
+                  <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800">
+                    <span className="text-zinc-500">32% Daily ($16 / 5d):</span>
+                    <span className="text-emerald-400 font-bold">
+                      +{(rechargeBalance * MINING_PACKAGE_RULES.DAILY_RATE).toFixed(4)} BNB/day ({formatUSD(rechargeBalance * MINING_PACKAGE_RULES.DAILY_RATE * 614.5)}/day · {formatUSD(rechargeBalance * MINING_PACKAGE_RULES.DAILY_RATE * 614.5 * MINING_PACKAGE_RULES.TARGET_DAYS)} in 5d)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-xl border border-emerald-500/30 shadow-inner">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-zinc-400">Mining Dashboard Count:</span>
+                    <span className="text-amber-400 font-bold text-sm tracking-wide">
+                      {accumulatedMiningYieldBnb.toFixed(6)} BNB
+                    </span>
+                    <span className="text-zinc-500 text-[11px]">
+                      (≈ {formatUSD(accumulatedMiningYieldBnb * 614.5)})
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800">
-                  <span className="text-zinc-500">Accumulated Mining Profit:</span>
-                  <span className="text-amber-400 font-bold">
-                    {accumulatedMiningYieldBnb.toFixed(6)} BNB
-                  </span>
+
+                {/* Miner Withdrawal Protocol Rule Badge */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono">
+                    <Cpu className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>
+                      Withdrawal starts from <strong className="text-white">$15.00</strong> • Miner must have mined <strong className="text-white">$16.00</strong> to withdraw $15.00 (<span className="text-amber-400 font-bold">$1.00</span> charge)
+                    </span>
+                  </div>
+                  {accumulatedMiningYieldBnb * 614.5 < 16.0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const neededBnb = (16.50 / 614.5) - accumulatedMiningYieldBnb;
+                        addMinedYieldBnb(Math.max(0.001, neededBnb));
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-sans font-semibold transition-colors"
+                      title="Fast-forward miner earnings to test $16 withdrawal requirement"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <span>Boost to $16.00 Mined</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Binance Mining Cloud Live Connection & Engine Boost Strip */}
+                <div className="mt-2 p-3 rounded-2xl bg-zinc-950 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-inner">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+                    <div>
+                      <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                        <span>🟡 Binance Mining Cloud:</span>
+                        <span className="text-white font-black">{binanceCloud.hashrateTh.toFixed(1)} TH/s</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          {binanceCloud.multiplier}x BOOST
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-zinc-400 font-sans block">
+                        Direct Stratum cluster: <span className="text-zinc-200 font-mono">{binanceCloud.region}</span> • Accepted Shares: {binanceCloud.acceptedShares.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const res = boostMiningEngine();
+                        setClaimMsg(res.message);
+                        setTimeout(() => setClaimMsg(null), 6000);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:brightness-110 text-zinc-950 font-black text-xs font-sans shadow-md flex items-center gap-1.5 transition-all"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-zinc-950" />
+                      <span>Boost Mining Engine</span>
+                    </button>
+
+                    {onGoToMining && (
+                      <button
+                        type="button"
+                        onClick={onGoToMining}
+                        className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-750 font-semibold text-xs font-sans transition-all flex items-center gap-1"
+                      >
+                        <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Cloud Console</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
               <div className="p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800/80 text-xs text-zinc-400 leading-relaxed max-w-xl">
                 <strong className="text-amber-300 font-semibold block mb-0.5">Zero figures before recharging:</strong>
-                Active figures of trading and mining start after recharging. Confirm a BNB recharge package ($10 - $1,000) to activate the TS BNB trading bot and 4% daily profit protocol.
+                Active figures of trading and mining start after recharging. Confirm a BNB recharge package ($10 - $1,000) to activate the TS BNB trading bot ($10 package mines $16.00 in 5 days at 32%/day).
               </div>
             )}
           </div>
@@ -168,7 +308,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 onClick={handleClaimMining}
                 className="px-4 py-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition-all flex items-center gap-1.5"
-                title="Claim accumulated 4% mining profit directly to your wallet"
+                title="Claim accumulated mining profit directly to your wallet"
               >
                 <TrendingUp className="w-4 h-4" />
                 <span>Claim Mining Profit ({accumulatedMiningYieldBnb.toFixed(4)} BNB)</span>
@@ -183,6 +323,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Withdrawal BNB
               </button>
             )}
+
+            {onGoToPaycheck && (
+              <button
+                type="button"
+                onClick={() => onGoToPaycheck(CONTRACTS.RECHARGE_ROUTER_DEFI)}
+                className="px-4 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Inspect & withdraw paycheck for 0xdB19b0785d1BA051ECdbC721c86e0828ACf43Db0"
+              >
+                <span>Paycheck ({shortenAddress(CONTRACTS.RECHARGE_ROUTER_DEFI)})</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -192,6 +344,92 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>{claimMsg}</span>
           </div>
         )}
+
+        {/* Live Cloud Airdrops, Meme Tokens, TS Sovereign NFTs & Connected Ads Feeder Strip */}
+        <div className="mt-4 pt-4 border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-950 border border-amber-500/40 shrink-0">
+              <img
+                src={CONTRACTS.TS_SOVEREIGN_NFT_IMAGE}
+                alt="TS Sovereign De-Coin NFT"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="text-xs">
+              <div className="font-bold text-white">
+                TS Sovereign NFT, Connected Ads & 24h Mining Feed ($1.00 / 24h)
+              </div>
+              <div className="text-zinc-400 font-mono tabular-nums mt-0.5">
+                Feed: <span className="text-amber-400 font-semibold">{formatUSD(miningFeedAccumulatedUsd)} / $1.00</span> · {activeFeedTokens.length} tokens · {activeFeedNfts.length} TS NFTs · {activeAds.length} Ads ·{' '}
+                <span className="text-emerald-400 font-semibold">+{formatUSD(dailyAssetFeedUsd)}/day</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onGoToStakePools && (
+              <button
+                type="button"
+                onClick={onGoToStakePools}
+                className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-emerald-500/40 text-emerald-400 font-bold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Landmark className="w-3.5 h-3.5" />
+                <span>Stake Pools · Cardamom & RWA ({formatUSD(totalStakedRwaUsd)})</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {onGoToAirdrops && (
+              <button
+                type="button"
+                onClick={onGoToAirdrops}
+                className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-amber-500/40 text-amber-400 font-bold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Create TS NFT & Connect Ads</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Second Generation Product Quick Jump Action */}
+      <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border border-amber-500/40 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/5">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shrink-0 shadow-inner">
+            <Cpu className="w-6 h-6 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-zinc-950 font-black text-[10px] tracking-wider uppercase shadow-sm">
+                Second Generation Product
+              </span>
+              <span className="text-xs font-bold text-white">TS Mining Machines & Packages</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono hidden sm:inline">
+                $100 to $2000 Rigs
+              </span>
+            </div>
+            <p className="text-xs text-zinc-300 mt-1">
+              Scroll down to view the <strong className="text-amber-300">TS BNB Professional Mining Rig Lineup</strong>, connect active hardware machines, and buy mining machine packages.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const el = document.getElementById('ts-mining-machines');
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth' });
+            }
+          }}
+          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 shrink-0 transition-all active:scale-95 cursor-pointer"
+        >
+          <span>Scroll Down: TS Mining Machines</span>
+          <ArrowDown className="w-4 h-4 animate-bounce stroke-[3]" />
+        </button>
       </div>
 
       {/* Featured TS BOT Image Station Banner */}
@@ -206,7 +444,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 hasRecharged ? 'text-emerald-400' : 'text-zinc-400'
               }`}>
                 <span className={`w-2 h-2 rounded-full ${hasRecharged ? 'bg-emerald-400 animate-ping' : 'bg-zinc-600'}`}></span>
-                <span>{hasRecharged ? 'Auto Trading Active (4% Daily Profit)' : 'Awaiting Recharge to Start Trading'}</span>
+                <span>{hasRecharged ? 'Auto Trading Active ($10 Mines $16 / 5d)' : 'Awaiting Recharge to Start Trading'}</span>
               </span>
             </div>
             <h2 className="text-2xl font-black text-white tracking-tight">
@@ -534,6 +772,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Second Generation Product: TS Mining Machines (Connect Machines & Packages) */}
+      <MiningMachinesSection
+        id="ts-mining-machines"
+        onBuyPackage={(pkg) => {
+          setSelectedMachinePackage(pkg);
+          setBuyModalOpen(true);
+        }}
+        onOpenWithdrawal={onOpenWithdrawal}
+      />
+
+      {/* Buy Mining Machines Packages Modal */}
+      <BuyMachineModal
+        isOpen={buyModalOpen}
+        onClose={() => {
+          setBuyModalOpen(false);
+          setSelectedMachinePackage(null);
+        }}
+        selectedPackage={selectedMachinePackage}
+      />
     </div>
   );
 };

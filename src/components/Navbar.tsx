@@ -22,7 +22,12 @@ import {
   LogIn,
   LogOut,
   Key,
-  ShieldCheck
+  ShieldCheck,
+  Cpu,
+  Radio,
+  Gift,
+  Banknote,
+  Landmark
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
 import { CONTRACTS, shortenAddress } from '../data/constants';
@@ -76,9 +81,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navItems = [
     { id: 'dashboard', label: 'AMM Pools', icon: Layers },
+    { id: 'machines', label: 'TS Mining Machines', icon: Cpu, badge: 'GEN 2' },
+    { id: 'mining', label: 'Binance Mining Cloud', icon: Radio, badge: 'HOT' },
+    { id: 'airdrops', label: 'Airdrops & NFTs', icon: Gift, badge: 'FEED' },
     { id: 'bot', label: 'TS BOT Engine', icon: Bot, badge: 'LIVE' },
     { id: 'liquidity', label: 'Liquidity & Tiers', icon: Zap },
+    { id: 'stakepools', label: 'Stake Pools', icon: Landmark, badge: 'RWA' },
     { id: 'referrals', label: 'Referral Center', icon: Share2, badge: '4-Tier' },
+    { id: 'paycheck', label: 'Paycheck', icon: Banknote },
     { id: 'calculator', label: 'Yield & IL Math', icon: Calculator },
     { id: 'statements', label: 'Financial Statements', icon: FileText },
   ];
@@ -121,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  className={`relative flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-zinc-800 text-amber-400 border border-zinc-700 shadow-inner'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80'
