@@ -50,14 +50,35 @@ export const AlertToast: React.FC = () => {
             {activeAlertToast.note}
           </p>
 
-          <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
-            <div className="flex items-center gap-1.5 text-amber-400 font-mono">
+          <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-[11px] text-zinc-400">
+            <div className="flex items-center gap-1.5 text-amber-400 font-mono min-w-0">
               <Mail className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate max-w-[200px]" title={activeAlertToast.recipientEmail}>
+              <span className="truncate max-w-[165px]" title={activeAlertToast.recipientEmail}>
                 {activeAlertToast.recipientEmail}
               </span>
+              {!isRecharge && activeAlertToast.gmailDeliveryStatus && (
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-sans font-bold uppercase tracking-wider shrink-0 ${
+                    activeAlertToast.gmailDeliveryStatus === 'SENT'
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                      : activeAlertToast.gmailDeliveryStatus === 'NEEDS_AUTH'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : activeAlertToast.gmailDeliveryStatus === 'FAILED'
+                      ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                      : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                  }`}
+                >
+                  {activeAlertToast.gmailDeliveryStatus === 'SENT'
+                    ? 'Gmail Sent'
+                    : activeAlertToast.gmailDeliveryStatus === 'NEEDS_AUTH'
+                    ? 'Needs Gmail Sync'
+                    : activeAlertToast.gmailDeliveryStatus === 'FAILED'
+                    ? 'Send Failed'
+                    : 'Sending...'}
+                </span>
+              )}
             </div>
-            <span className="text-zinc-500 font-mono">
+            <span className="text-zinc-500 font-mono shrink-0">
               Block #{activeAlertToast.blockNumber}
             </span>
           </div>

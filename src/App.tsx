@@ -21,6 +21,9 @@ import { BuyMachineModal } from './components/BuyMachineModal';
 import { AirdropsMemeNftView } from './components/AirdropsMemeNftView';
 import { PaycheckNavigatorView } from './components/PaycheckNavigatorView';
 import { StakePoolsView } from './components/StakePoolsView';
+import { Cip95GovernmentView } from './components/Cip95GovernmentView';
+import { VideoTsNftMiniScreen } from './components/VideoTsNftMiniScreen';
+import { GoogleBusinessPopupAd } from './components/GoogleBusinessPopupAd';
 import { Footer } from './components/Footer';
 import { MiningMachinePackage } from './types';
 import { CONTRACTS } from './data/constants';
@@ -28,7 +31,14 @@ import { Gift, UserPlus, LogIn, X } from 'lucide-react';
 
 export function AppContent() {
   const { pendingInviteCode, currentUser } = useProtocol();
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) return tabParam;
+    } catch {}
+    return 'dashboard';
+  });
   const [walletModalOpen, setWalletModalOpen] = useState<boolean>(false);
   const [rechargeModalOpen, setRechargeModalOpen] = useState<boolean>(false);
   const [withdrawalModalOpen, setWithdrawalModalOpen] = useState<boolean>(false);
@@ -149,6 +159,7 @@ export function AppContent() {
           <AirdropsMemeNftView
             onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
             onGoToStakePools={() => setActiveTab('stakepools')}
+            onGoToGov={() => setActiveTab('gov')}
           />
         )}
         {activeTab === 'bot' && (
@@ -167,6 +178,12 @@ export function AppContent() {
           <StakePoolsView
             onOpenWithdrawal={() => openWithdrawalForAddress()}
             onGoToCreateNft={() => setActiveTab('airdrops')}
+          />
+        )}
+        {activeTab === 'gov' && (
+          <Cip95GovernmentView
+            onGoToAirdropsAds={() => setActiveTab('airdrops')}
+            onGoToStakePools={() => setActiveTab('stakepools')}
           />
         )}
         {activeTab === 'referrals' && <ReferralCenter onOpenAuthModal={handleOpenAuth} />}
@@ -237,6 +254,15 @@ export function AppContent() {
 
       {/* Floating Real-Time Alert Toast */}
       <AlertToast />
+
+      {/* Video TS NFT Small Screen Floating Player */}
+      <VideoTsNftMiniScreen
+        onOpenNftTab={() => setActiveTab('airdrops')}
+        onOpenGovTab={() => setActiveTab('gov')}
+      />
+
+      {/* Appearing Google Business Pop-Up Ads (Truworths, Jet, Game, etc.) */}
+      <GoogleBusinessPopupAd />
 
       {/* Footer */}
       <Footer />

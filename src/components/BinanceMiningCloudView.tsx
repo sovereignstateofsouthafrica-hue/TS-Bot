@@ -45,6 +45,7 @@ export const BinanceMiningCloudView: React.FC<BinanceMiningCloudViewProps> = ({
     setCloudRegion,
     setMiningMultiplier,
     accumulatedMiningYieldBnb,
+    achievedMiningTotalBnb,
     claimMiningYield,
     rechargeBalance,
     currentBlock,
@@ -208,14 +209,14 @@ export const BinanceMiningCloudView: React.FC<BinanceMiningCloudViewProps> = ({
         {/* Mined Dashboard Count */}
         <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-xl space-y-1">
           <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-            <span>Accumulated Mined BNB</span>
+            <span>Unified TS BOT & IRD Balance</span>
             <Coins className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
+          <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight tabular-nums">
             {accumulatedMiningYieldBnb.toFixed(6)}
           </div>
-          <div className="text-[11px] text-zinc-400 font-mono">
-            ≈ {formatUSD(currentMinedUsd)} USD
+          <div className="text-[11px] text-zinc-400 font-mono tabular-nums">
+            ≈ {formatUSD(currentMinedUsd)} USD · Achieved: {achievedMiningTotalBnb.toFixed(4)} BNB
           </div>
         </div>
 

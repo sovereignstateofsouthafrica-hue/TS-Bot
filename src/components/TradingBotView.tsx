@@ -36,8 +36,13 @@ export const TradingBotView: React.FC<TradingBotViewProps> = ({ onOpenRecharge, 
     pools,
     hasRecharged,
     rechargeBalance,
-    rechargeBalanceUsd
+    rechargeBalanceUsd,
+    accumulatedMiningYieldBnb,
+    achievedMiningTotalBnb,
+    claimMiningYield,
   } = useProtocol();
+
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'live' | 'strategy' | 'settings'>('live');
 
@@ -283,6 +288,56 @@ export const TradingBotView: React.FC<TradingBotViewProps> = ({ onOpenRecharge, 
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Unified TS BOT & IRD Balance & Profit Withdrawal Strip (Same App, Same View) */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-zinc-900 border border-amber-500/40 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-lg">
+        <div className="space-y-1">
+          <div className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
+            Unified TS BOT & IRD Mining Profit Balance (Same View)
+          </div>
+          <div className="flex flex-wrap items-baseline gap-3 font-mono tabular-nums">
+            <span className="text-2xl font-black text-white">
+              {accumulatedMiningYieldBnb.toFixed(6)} <span className="text-amber-400">BNB</span>
+            </span>
+            <span className="text-sm font-bold text-zinc-400">
+              (≈ {formatUSD(accumulatedMiningYieldBnb * 614.5)})
+            </span>
+            <span className="text-xs font-bold text-emerald-400">
+              Lifetime Achieved: {achievedMiningTotalBnb.toFixed(6)} BNB
+            </span>
+          </div>
+          <p className="text-[11px] text-zinc-400">
+            TS BOT and IRD Mining share this single balance — syncing or claiming profits keeps your Mining Dashboard intact.
+          </p>
+          {syncNotice && (
+            <div className="text-xs text-emerald-300 font-mono pt-1">{syncNotice}</div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              const res = claimMiningYield();
+              setSyncNotice(res.message);
+              setTimeout(() => setSyncNotice(null), 5000);
+            }}
+            className="px-3.5 py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-amber-300 border border-amber-500/35 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Sync Profit to Wallet</span>
+          </button>
+          {onOpenWithdrawal && (
+            <button
+              type="button"
+              onClick={onOpenWithdrawal}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-zinc-950 font-black text-xs transition-all cursor-pointer"
+            >
+              Withdraw Profits ($15+)
+            </button>
+          )}
         </div>
       </div>
 

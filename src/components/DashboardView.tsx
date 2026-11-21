@@ -59,6 +59,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     rechargeBalanceUsd,
     hasRecharged,
     accumulatedMiningYieldBnb,
+    achievedMiningTotalBnb,
     claimMiningYield,
     addMinedYieldBnb,
     binanceCloud,
@@ -146,7 +147,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
                   : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
               }`}>
-                <span className={`w-2 h-2 rounded-full ${hasRecharged ? 'bg-emerald-400 animate-ping' : 'bg-zinc-500'}`}></span>
+                <span className={`w-2 h-2 rounded-full ${hasRecharged ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
                 {hasRecharged 
                   ? 'PACKAGE 1 ($10 RECHARGED) • MINES $16.00 IN 5 DAYS (32%/DAY)' 
                   : 'AWAITING RECHARGE • TRADING FIGURES INACTIVE'}
@@ -199,17 +200,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       +{(rechargeBalance * MINING_PACKAGE_RULES.DAILY_RATE).toFixed(4)} BNB/day ({formatUSD(rechargeBalance * MINING_PACKAGE_RULES.DAILY_RATE * 614.5)}/day · {formatUSD(rechargeBalance * MINING_PACKAGE_RULES.DAILY_RATE * 614.5 * MINING_PACKAGE_RULES.TARGET_DAYS)} in 5d)
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-xl border border-emerald-500/30 shadow-inner">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span className="text-zinc-400">Mining Dashboard Count:</span>
+                  <div className="flex flex-wrap items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-xl border border-emerald-500/30 shadow-inner tabular-nums">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="text-zinc-400">Unified TS BOT & IRD Balance:</span>
                     <span className="text-amber-400 font-bold text-sm tracking-wide">
                       {accumulatedMiningYieldBnb.toFixed(6)} BNB
                     </span>
                     <span className="text-zinc-500 text-[11px]">
-                      (≈ {formatUSD(accumulatedMiningYieldBnb * 614.5)})
+                      (≈ {formatUSD(accumulatedMiningYieldBnb * 614.5)} · Achieved: {achievedMiningTotalBnb.toFixed(4)} BNB)
                     </span>
                   </div>
                 </div>
@@ -241,7 +239,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {/* Binance Mining Cloud Live Connection & Engine Boost Strip */}
                 <div className="mt-2 p-3 rounded-2xl bg-zinc-950 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-inner">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
                     <div>
                       <div className="flex items-center gap-1.5 text-amber-400 font-bold">
                         <span>🟡 Binance Mining Cloud:</span>
@@ -307,11 +305,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {hasRecharged && (
               <button
                 onClick={handleClaimMining}
-                className="px-4 py-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition-all flex items-center gap-1.5"
-                title="Claim accumulated mining profit directly to your wallet"
+                className="px-4 py-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Sync accumulated TS BOT & IRD mining profit to wallet without decreasing Mining Dashboard balance"
               >
                 <TrendingUp className="w-4 h-4" />
-                <span>Claim Mining Profit ({accumulatedMiningYieldBnb.toFixed(4)} BNB)</span>
+                <span>Sync Profit to Wallet ({accumulatedMiningYieldBnb.toFixed(4)} BNB)</span>
               </button>
             )}
 
@@ -443,7 +441,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className={`flex items-center gap-1 text-[11px] font-semibold ${
                 hasRecharged ? 'text-emerald-400' : 'text-zinc-400'
               }`}>
-                <span className={`w-2 h-2 rounded-full ${hasRecharged ? 'bg-emerald-400 animate-ping' : 'bg-zinc-600'}`}></span>
+                <span className={`w-2 h-2 rounded-full ${hasRecharged ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                 <span>{hasRecharged ? 'Auto Trading Active ($10 Mines $16 / 5d)' : 'Awaiting Recharge to Start Trading'}</span>
               </span>
             </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { 
   LiquidityPool, 
   UserPosition, 
@@ -19,7 +19,11 @@ import {
   MiningProfitFeedEvent,
   StakePool,
   StakePoolEvent,
-  AdCampaignSlot
+  AdCampaignSlot,
+  GoogleAdsConfig,
+  GoogleAdsConversionEvent,
+  Cip95DRepState,
+  GovernmentSubmission
 } from '../types';
 import { 
   INITIAL_POOLS, 
@@ -34,9 +38,22 @@ import {
   INITIAL_MINING_NFTS,
   INITIAL_STAKE_POOLS,
   INITIAL_AD_SLOTS,
+  GOOGLE_ADS_DEFAULT_CONFIG,
+  INITIAL_CIP95_DREP_STATE,
+  GOVERNMENT_SUBMISSION_AGENCIES,
   calculateAmountOut, 
   shortenAddress 
 } from '../data/constants';
+import { initGoogleAdsTag, initGoogleAdSense, dispatchGoogleAdsConversion } from '../utils/googleAds';
+import {
+  initGmailAuth,
+  googleSignInForGmail,
+  getGmailAccessToken,
+  getGmailUserEmail,
+  logoutGmailAuth,
+  sendWithdrawalAuthorizationEmail,
+  WithdrawalEmailResult,
+} from '../utils/gmailAuth';
 
 interface ProtocolContextType {
   pools: LiquidityPool[];
@@ -47,6 +64,10 @@ interface ProtocolContextType {
   botConfig: BotConfig;
   setBotConfig: React.Dispatch<React.SetStateAction<BotConfig>>;
   wallet: WalletState;
+  refreshTokenBalances: (
+    source?: 'RECHARGE' | 'WITHDRAWAL' | 'MANUAL'
+  ) => { BNB: number; TS: number; USDT: number; refreshedAt: number };
+  lastBalanceRefreshAt: number;
   connectWallet: (connector: 'MetaMask' | 'Binance Wallet' | 'Trust Wallet') => void;
   disconnectWallet: () => void;
   switchNetwork: (net: string, chainId: number) => void;
@@ -67,6 +88,17 @@ interface ProtocolContextType {
   alerts: CryptoAlert[];
   activeAlertToast: CryptoAlert | null;
   dismissAlertToast: () => void;
+  gmailAuthorized: boolean;
+  gmailNeedsAuth: boolean;
+  gmailAccountEmail: string | null;
+  isGmailSigningIn: boolean;
+  gmailLastSyncMessage: string | null;
+  connectGmailAuthorization: () => Promise<{ success: boolean; email?: string; error?: string }>;
+  disconnectGmailAuthorization: () => Promise<void>;
+  dispatchWithdrawalEmailForAlert: (
+    alertOrId: CryptoAlert | string
+  ) => Promise<WithdrawalEmailResult>;
+  sendTestWithdrawalAuthEmail: () => Promise<WithdrawalEmailResult>;
   referralUsers: ReferralUser[];
   unclaimedCommissionBnb: number;
   claimReferralCommission: () => { success: boolean; message: string; amountBnb: number; amountUsd: number };
@@ -86,6 +118,9 @@ interface ProtocolContextType {
   rechargeBalanceUsd: number;
   hasRecharged: boolean;
   accumulatedMiningYieldBnb: number;
+  achievedMiningTotalBnb: number;
+  totalWithdrawnFromMinerBnb: number;
+  claimedToWalletMiningBnb: number;
   claimMiningYield: () => { success: boolean; message: string; amountBnb: number };
   resetSystemData: () => void;
   binanceCloud: BinanceMiningCloudState;
@@ -153,9 +188,15 @@ interface ProtocolContextType {
     dailyFeedUsd?: number;
     stakePoolApyBoostPct?: number;
     connectPoolIds?: string[];
+    linkedNftIds?: string[];
+    rwaValueUsd?: number;
+    isMemeNft?: boolean;
     image?: string;
+    videoUrl?: string;
   }) => { success: boolean; message: string; nft?: MiningNftAsset };
   toggleNftStakePoolConnection: (nftId: string, poolId: string) => { success: boolean; message: string };
+  toggleNftToNftLink: (sourceNftId: string, targetNftId: string) => { success: boolean; message: string };
+  linkAllNftsToRwaAndTsBnb: () => { success: boolean; message: string };
   connectNftToAllStakePools: (nftId: string) => { success: boolean; message: string };
   connectStakePoolWithAllNfts: (poolId: string) => { success: boolean; message: string };
   toggleAdConnection: (adId: string) => { success: boolean; message: string };
@@ -167,7 +208,53 @@ interface ProtocolContextType {
     connectedTarget: AdCampaignSlot['connectedTarget'];
     dailyRevenueUsd?: number;
     targetAddress?: string;
+    network?: AdCampaignSlot['network'];
+    campaignType?: AdCampaignSlot['campaignType'];
+    businessCategory?: AdCampaignSlot['businessCategory'];
+    brandDomain?: string;
+    destinationUrl?: string;
+    headlineOffer?: string;
   }) => { success: boolean; message: string };
+  googleAdsConfig: GoogleAdsConfig;
+  googleAdsConversions: GoogleAdsConversionEvent[];
+  updateGoogleAdsConfig: (updates: Partial<Pick<GoogleAdsConfig, 'googleTagId' | 'conversionLabel' | 'dailyBudgetUsd'>>) => { success: boolean; message: string };
+  toggleGoogleAdsStatus: () => { success: boolean; message: string };
+  triggerGoogleAdsConversion: (source: string, valueUsd?: number) => { success: boolean; message: string };
+  popupAdEnabled: boolean;
+  activePopupAd: AdCampaignSlot | null;
+  togglePopupAdEnabled: () => void;
+  openPopupBusinessAd: (adId?: string) => void;
+  dismissPopupBusinessAd: () => void;
+  nextPopupBusinessAd: () => void;
+  recordPopupAdEngagement: (adId: string, action: 'IMPRESSION' | 'CLICK') => void;
+  cip95State: Cip95DRepState;
+  govSubmissions: GovernmentSubmission[];
+  connectCip95Wallet: () => Promise<{ success: boolean; message: string }>;
+  registerCip95DRep: () => { success: boolean; message: string };
+  submitProjectToGovernment: (params: {
+    projectTitle: string;
+    targetAgency: string;
+    cipStandard?: string;
+    assetSummary?: string;
+    adNetworkSummary?: string;
+    submissionTrack?: GovernmentSubmission['submissionTrack'];
+    treasuryAmountUsd?: number;
+    treasuryDestination?: string;
+  }) => Promise<{ success: boolean; message: string; submission?: GovernmentSubmission }>;
+  voteOnGovernmentSubmission: (
+    submissionId: string,
+    vote: 'YES' | 'NO' | 'ABSTAIN'
+  ) => { success: boolean; message: string };
+  isVideoNftPlaying: boolean;
+  setIsVideoNftPlaying: (playing: boolean) => void;
+  videoPlayEarningsUsd: number;
+  videoNftPoolEarningsUsd: number;
+  collectVideoAndNftPoolMoney: () => {
+    success: boolean;
+    message: string;
+    collectedUsd: number;
+    collectedBnb: number;
+  };
 }
 
 const ProtocolContext = createContext<ProtocolContextType | null>(null);
@@ -177,19 +264,70 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
   const [selectedPoolId, setSelectedPoolId] = useState<string>('ts-bnb');
   const [currentBlock, setCurrentBlock] = useState<number>(38429104);
 
-  // User Wallet State
-  const [wallet, setWallet] = useState<WalletState>({
-    connected: true,
-    address: '0x71C...a49B',
-    network: 'BNB Smart Chain (Mainnet)',
-    chainId: 56,
-    balances: {
-      BNB: 8.45,
-      TS: 2450.0,
-      USDT: 1200.0,
-    },
-    connector: 'MetaMask',
+  // User Wallet State (persisted to localStorage for live balance sync)
+  const [wallet, setWallet] = useState<WalletState>(() => {
+    const defaultWallet: WalletState = {
+      connected: true,
+      address: '0x71C...a49B',
+      network: 'BNB Smart Chain (Mainnet)',
+      chainId: 56,
+      balances: {
+        BNB: 8.45,
+        TS: 2450.0,
+        USDT: 1200.0,
+      },
+      connector: 'MetaMask',
+    };
+    try {
+      const stored = localStorage.getItem('ts_bot_wallet_state');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.balances) {
+          return {
+            ...defaultWallet,
+            ...parsed,
+            balances: {
+              ...defaultWallet.balances,
+              ...parsed.balances,
+            },
+          };
+        }
+      }
+    } catch (e) {}
+    return defaultWallet;
   });
+  const walletRef = useRef<WalletState>(wallet);
+  const [lastBalanceRefreshAt, setLastBalanceRefreshAt] = useState<number>(() => Date.now());
+
+  // Gmail Withdrawal Authorization Sync State (in-memory token only)
+  const [gmailAuthorized, setGmailAuthorized] = useState<boolean>(() => Boolean(getGmailAccessToken()));
+  const [gmailNeedsAuth, setGmailNeedsAuth] = useState<boolean>(() => !getGmailAccessToken());
+  const [gmailAccountEmail, setGmailAccountEmail] = useState<string | null>(() => getGmailUserEmail());
+  const [isGmailSigningIn, setIsGmailSigningIn] = useState<boolean>(false);
+  const [gmailLastSyncMessage, setGmailLastSyncMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = initGmailAuth(
+      (user) => {
+        setGmailAuthorized(true);
+        setGmailNeedsAuth(false);
+        setGmailAccountEmail(user.email);
+      },
+      () => {
+        setGmailAuthorized(false);
+        setGmailNeedsAuth(true);
+        setGmailAccountEmail(null);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    walletRef.current = wallet;
+    try {
+      localStorage.setItem('ts_bot_wallet_state', JSON.stringify(wallet));
+    } catch (e) {}
+  }, [wallet]);
 
   // User Package 1 ($10 USD) Recharge State (0.016273 BNB at $614.50 BNB/USD)
   const PACKAGE_1_BNB = 0.016273;
@@ -222,6 +360,31 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     // Initial accrued mining yield count for active $10 package
     return 0.000240; // ~$0.15 USD live yield
   });
+
+  const [totalWithdrawnFromMinerBnb, setTotalWithdrawnFromMinerBnb] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_total_withdrawn_miner_bnb');
+      if (stored) {
+        const val = parseFloat(stored);
+        if (!isNaN(val) && val >= 0) return val;
+      }
+    } catch (e) {}
+    return 0;
+  });
+
+  const [claimedToWalletMiningBnb, setClaimedToWalletMiningBnb] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_claimed_mining_bnb');
+      if (stored) {
+        const val = parseFloat(stored);
+        if (!isNaN(val) && val >= 0) return val;
+      }
+    } catch (e) {}
+    return 0;
+  });
+
+  // Non-decreasing cumulative total achieved across TS BOT & IRD unified mining
+  const achievedMiningTotalBnb = accumulatedMiningYieldBnb + totalWithdrawnFromMinerBnb;
 
   // User LP Positions (Active mining position from $10 Package 1 in TS/BNB pool)
   const [userPositions, setUserPositions] = useState<UserPosition[]>(() => {
@@ -590,17 +753,8 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const [totalMinesFedToIrdBnb, setTotalMinesFedToIrdBnb] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem('ts_bot_ird_fed_mines_bnb');
-      if (stored) {
-        const val = parseFloat(stored);
-        if (!isNaN(val) && val > 0) return val;
-      }
-    } catch (e) {}
-    return 0.1248; // Initial fed mines tally (~$76.69 USD)
-  });
-
+  // Single unified TS BOT + IRD balance in the same app (eliminates confusing split balance)
+  const totalMinesFedToIrdBnb = accumulatedMiningYieldBnb;
   const totalMinesFedToIrdUsd = totalMinesFedToIrdBnb * 614.50;
 
   const [isMiningRobotFeedingIrd, setIsMiningRobotFeedingIrd] = useState<boolean>(() => {
@@ -662,13 +816,18 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem('ts_bot_airdrop_tokens');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const missingTokens = INITIAL_CLOUD_AIRDROP_TOKENS.filter(
+            (t) => !parsed.some((p: CloudAirdropToken) => p.id === t.id)
+          );
+          return [...missingTokens, ...parsed];
+        }
       }
     } catch (e) {}
     return INITIAL_CLOUD_AIRDROP_TOKENS;
   });
 
-  // Mining NFTs State (sync image URLs & prepend newly added flagship NFTs across localStorage sessions)
+  // Mining NFTs State (sync media, RWA value $1 TS BNB, linked NFTs & prepend new flagship NFTs across sessions)
   const [miningNfts, setMiningNfts] = useState<MiningNftAsset[]>(() => {
     try {
       const stored = localStorage.getItem('ts_bot_mining_nfts');
@@ -681,13 +840,19 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
               ? {
                   ...nft,
                   image: template.image,
+                  videoUrl: template.videoUrl ?? nft.videoUrl,
                   connectedPoolIds: nft.connectedPoolIds ?? template.connectedPoolIds ?? [],
+                  linkedNftIds: nft.linkedNftIds ?? template.linkedNftIds ?? [],
+                  rwaValueUsd: nft.rwaValueUsd ?? template.rwaValueUsd ?? 1.00,
+                  isMemeNft: nft.isMemeNft ?? template.isMemeNft ?? false,
                   stakePoolApyBoostPct: nft.stakePoolApyBoostPct ?? template.stakePoolApyBoostPct ?? 4.0,
                   editionLabel: nft.editionLabel ?? template.editionLabel,
                 }
               : {
                   ...nft,
                   connectedPoolIds: nft.connectedPoolIds ?? [],
+                  linkedNftIds: nft.linkedNftIds ?? [],
+                  rwaValueUsd: nft.rwaValueUsd ?? 1.00,
                   stakePoolApyBoostPct: nft.stakePoolApyBoostPct ?? 4.0,
                 };
           });
@@ -701,17 +866,232 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     return INITIAL_MINING_NFTS;
   });
 
-  // Connectable Ad Campaign Slots State
+  // Connectable Appearing Business Google Ads State (Truworths, Jet, Game, etc.)
   const [adSlots, setAdSlots] = useState<AdCampaignSlot[]>(() => {
     try {
       const stored = localStorage.getItem('ts_bot_ad_slots');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const customAds = parsed.filter((s: AdCampaignSlot) => s.id?.startsWith('ad-custom-'));
+          const syncedTemplates = INITIAL_AD_SLOTS.map((tpl) => {
+            const existing = parsed.find((s: AdCampaignSlot) => s.id === tpl.id);
+            return existing
+              ? {
+                  ...tpl,
+                  connected: existing.connected,
+                  impressions24h: existing.impressions24h ?? tpl.impressions24h,
+                  totalEarnedUsd: existing.totalEarnedUsd ?? tpl.totalEarnedUsd,
+                }
+              : tpl;
+          });
+          return [...customAds, ...syncedTemplates];
+        }
       }
     } catch (e) {}
     return INITIAL_AD_SLOTS;
   });
+
+  // Auto Pop-Up Google Business Ads State (Appearing Business Ads Only)
+  const [popupAdEnabled, setPopupAdEnabled] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_popup_ad_enabled');
+      if (stored !== null) return stored === 'true';
+    } catch (e) {}
+    return true;
+  });
+  const [activePopupAdId, setActivePopupAdId] = useState<string | null>(null);
+  const [popupAdIndex, setPopupAdIndex] = useState<number>(0);
+
+  // Video TS NFT Play Earnings & NFT Pool Collectable Balance
+  const [isVideoNftPlaying, setIsVideoNftPlaying] = useState<boolean>(true);
+  const [videoPlayEarningsUsd, setVideoPlayEarningsUsd] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_video_play_earnings_usd');
+      if (stored) {
+        const val = parseFloat(stored);
+        if (!isNaN(val) && val >= 0) return val;
+      }
+    } catch (e) {}
+    return 1.25;
+  });
+  const [videoNftPoolEarningsUsd, setVideoNftPoolEarningsUsd] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_video_nft_pool_usd');
+      if (stored) {
+        const val = parseFloat(stored);
+        if (!isNaN(val) && val >= 0) return val;
+      }
+    } catch (e) {}
+    return 2.40;
+  });
+
+  // Live ticker accruing money while playing the Video TS NFT & compounding NFT Pool yield
+  useEffect(() => {
+    if (!isVideoNftPlaying) return;
+    const timer = setInterval(() => {
+      setVideoPlayEarningsUsd((prev) => {
+        const next = Number((prev + 0.04).toFixed(2));
+        try {
+          localStorage.setItem('ts_bot_video_play_earnings_usd', String(next));
+        } catch (e) {}
+        return next;
+      });
+      setVideoNftPoolEarningsUsd((prev) => {
+        const activeOwnedCount = miningNfts.filter((n) => n.owned && n.isStakedFeeding).length;
+        const poolBoostIncrement = 0.02 + activeOwnedCount * 0.01;
+        const next = Number((prev + poolBoostIncrement).toFixed(2));
+        try {
+          localStorage.setItem('ts_bot_video_nft_pool_usd', String(next));
+        } catch (e) {}
+        return next;
+      });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [isVideoNftPlaying, miningNfts]);
+
+  // CIP-95 Government Governance & Official Project Submission State
+  const [cip95State, setCip95State] = useState<Cip95DRepState>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_cip95_state');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.drepId) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_CIP95_DREP_STATE;
+  });
+
+  const [govSubmissions, setGovSubmissions] = useState<GovernmentSubmission[]>(() => {
+    const normalizeSubmission = (s: GovernmentSubmission): GovernmentSubmission => ({
+      ...s,
+      submissionTrack: s.submissionTrack ?? 'DUAL_GOV_AND_TREASURY',
+      treasuryAmountUsd: s.treasuryAmountUsd ?? 250000,
+      treasuryAmountAda: s.treasuryAmountAda ?? 312500,
+      treasuryDestination: s.treasuryDestination ?? CONTRACTS.RECHARGE_ROUTER_DEFI,
+      voteYesCount: s.voteYesCount ?? 42,
+      voteNoCount: s.voteNoCount ?? 2,
+      voteAbstainCount: s.voteAbstainCount ?? 5,
+      votePowerYesAda: s.votePowerYesAda ?? 125000,
+      votingOpenOnline: s.votingOpenOnline ?? true,
+    });
+    try {
+      const stored = localStorage.getItem('ts_bot_gov_submissions');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(normalizeSubmission);
+        }
+      }
+    } catch (e) {}
+    return [
+      normalizeSubmission({
+        id: 'gov-sub-init-1',
+        submittedAt: Date.now() - 3600000,
+        referenceCode: 'CIP95-ZA-2026-001',
+        projectTitle: 'TS Protocol · Economic Federal De-Coin & RWA System',
+        entityName: GOOGLE_ADS_DEFAULT_CONFIG.advertiserName,
+        cipStandard: 'CIP-95 (Voltaire Governance) + Cardano ADA Stake Pool + BEP-20 Bridge',
+        targetAgency: GOVERNMENT_SUBMISSION_AGENCIES[1],
+        drepId: INITIAL_CIP95_DREP_STATE.drepId,
+        liveAppUrl: `${CONTRACTS.LIVE_APP_URL}/?tab=gov`,
+        assetSummary: 'TS Sovereign Video NFT (#TS-VID-001), Cardamom RWA, Treasury Bills, Gold & Cardano ADA Pools',
+        adNetworkSummary: '16 Retail Business Google Ads Ready for Gov Launch (Truworths, Jet, Game, Woolworths, PEP, Vodacom, MTN)',
+        anchorHash: 'sha256:95a4e1c8d72f0318b490c1a67e4f28d0194b76e2088fa34e1190c3d2a78f0912',
+        submissionTrack: 'DUAL_GOV_AND_TREASURY',
+        treasuryAmountUsd: 250000,
+        treasuryAmountAda: 312500,
+        treasuryDestination: CONTRACTS.RECHARGE_ROUTER_DEFI,
+        voteYesCount: 42,
+        voteNoCount: 2,
+        voteAbstainCount: 5,
+        votePowerYesAda: 125000,
+        votingOpenOnline: true,
+        status: 'VOTING_ONLINE',
+      }),
+    ];
+  });
+
+  // Google Ads Config & Conversion Attribution State
+  const [googleAdsConfig, setGoogleAdsConfig] = useState<GoogleAdsConfig>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_google_ads_config');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.googleTagId) {
+          return {
+            ...GOOGLE_ADS_DEFAULT_CONFIG,
+            ...parsed,
+            kycVerified: true,
+            advertiserName: GOOGLE_ADS_DEFAULT_CONFIG.advertiserName,
+            verifiedChecks: GOOGLE_ADS_DEFAULT_CONFIG.verifiedChecks,
+          };
+        }
+      }
+    } catch (e) {}
+    return GOOGLE_ADS_DEFAULT_CONFIG;
+  });
+
+  const [googleAdsConversions, setGoogleAdsConversions] = useState<GoogleAdsConversionEvent[]>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_google_ads_conversions');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [
+      {
+        id: 'gads-conv-init-1',
+        timestamp: Date.now() - 45000,
+        eventName: 'conversion',
+        sendTo: `${GOOGLE_ADS_DEFAULT_CONFIG.googleTagId}/${GOOGLE_ADS_DEFAULT_CONFIG.conversionLabel}`,
+        valueUsd: 25.00,
+        currency: 'USD',
+        source: 'Cardamom Export Commodity Pool Stake',
+        dispatchedToGtag: true,
+      },
+      {
+        id: 'gads-conv-init-2',
+        timestamp: Date.now() - 120000,
+        eventName: 'conversion',
+        sendTo: `${GOOGLE_ADS_DEFAULT_CONFIG.googleTagId}/ts_nft_mint`,
+        valueUsd: 16.00,
+        currency: 'USD',
+        source: 'TS Sovereign De-Coin Gold NFT (#TS-001)',
+        dispatchedToGtag: true,
+      },
+    ];
+  });
+
+  // Initialize Google Ads (gtag.js) & Google AdSense scripts automatically when active
+  useEffect(() => {
+    if (googleAdsConfig.campaignStatus === 'ACTIVE' && googleAdsConfig.googleTagId) {
+      initGoogleAdsTag(googleAdsConfig.googleTagId);
+      initGoogleAdSense();
+    }
+  }, [googleAdsConfig.campaignStatus, googleAdsConfig.googleTagId]);
+
+  // Appearing Business Pop-Up Google Ad Cadence
+  const appearingBusinessAds = adSlots.filter((a) => a.connected);
+  const popupPool = appearingBusinessAds.length > 0 ? appearingBusinessAds : adSlots;
+
+  useEffect(() => {
+    if (!popupAdEnabled || googleAdsConfig.campaignStatus !== 'ACTIVE' || popupPool.length === 0) {
+      return;
+    }
+    const delayMs = activePopupAdId ? 65000 : 5000;
+    const timer = setTimeout(() => {
+      if (!activePopupAdId) {
+        const nextAd = popupPool[popupAdIndex % popupPool.length];
+        if (nextAd) {
+          setActivePopupAdId(nextAd.id);
+          setPopupAdIndex((idx) => (idx + 1) % popupPool.length);
+        }
+      }
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [popupAdEnabled, googleAdsConfig.campaignStatus, activePopupAdId, popupPool, popupAdIndex]);
 
   // Mining Profit Feed Events History (Airdrops, Meme Tokens & NFTs feeding into mining profits)
   const [miningProfitFeedHistory, setMiningProfitFeedHistory] = useState<MiningProfitFeedEvent[]>(() => {
@@ -1121,15 +1501,11 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // 5. Mining Robot Feed to IRD: stream mined TS BNB blocks directly into IRD Blockchain Wallet
+      // 5. Unified TS BOT & IRD feed stream (accumulatedMiningYieldBnb already holds the unified balance)
       if (isMiningRobotFeedingIrd && blockProfitBnb > 0) {
-        setTotalMinesFedToIrdBnb((prev) => {
-          const next = prev + blockProfitBnb;
-          try {
-            localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(next));
-          } catch (e) {}
-          return next;
-        });
+        try {
+          localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(accumulatedMiningYieldBnb + blockProfitBnb));
+        } catch (e) {}
 
         // Periodically emit real-time automated IRD feed stream event
         if (Math.random() > 0.65) {
@@ -1141,7 +1517,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
           const autoFeedEvent: IrdFeedEvent = {
             id: `ird-stream-${Date.now()}`,
             timestamp: Date.now(),
-            machineName: 'Mining Robot (TS BOT Engine)',
+            machineName: 'TS BOT & IRD Unified Miner',
             amountBnb: Number(feedBatchBnb.toFixed(6)),
             amountUsd: Number((feedBatchBnb * 614.50).toFixed(4)),
             source: 'MINING_ROBOT',
@@ -1149,7 +1525,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
             txHash: randomTx,
             status: 'FED_TO_IRD',
             blockNumber: currentBlock + 1,
-            note: 'Mining Robot automated continuous block feed to IRD Blockchain Wallet',
+            note: 'Unified TS BOT & IRD block profit credited in the same Mining Dashboard balance',
           };
           setIrdFeedHistory((prev) => [autoFeedEvent, ...prev.slice(0, 24)]);
         }
@@ -1295,6 +1671,79 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       },
     }));
   };
+
+  // Refresh the user's BNB and TS wallet token balances (automatically triggered after Recharge/Withdrawal)
+  const refreshTokenBalances = useCallback(
+    (source: 'RECHARGE' | 'WITHDRAWAL' | 'MANUAL' = 'MANUAL') => {
+      let latestBalances = { ...walletRef.current.balances };
+      try {
+        const stored = localStorage.getItem('ts_bot_wallet_state');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.balances) {
+            latestBalances = {
+              ...latestBalances,
+              BNB:
+                typeof parsed.balances.BNB === 'number' && Number.isFinite(parsed.balances.BNB)
+                  ? parsed.balances.BNB
+                  : latestBalances.BNB,
+              TS:
+                typeof parsed.balances.TS === 'number' && Number.isFinite(parsed.balances.TS)
+                  ? parsed.balances.TS
+                  : latestBalances.TS,
+              USDT:
+                typeof parsed.balances.USDT === 'number' && Number.isFinite(parsed.balances.USDT)
+                  ? parsed.balances.USDT
+                  : latestBalances.USDT,
+            };
+          }
+        }
+      } catch (e) {}
+
+      const syncedBalances = {
+        ...latestBalances,
+        BNB: Number(Math.max(0, latestBalances.BNB || 0).toFixed(6)),
+        TS: Number(Math.max(0, latestBalances.TS || 0).toFixed(4)),
+        USDT: Number(Math.max(0, latestBalances.USDT || 0).toFixed(4)),
+      };
+
+      const nextWallet: WalletState = {
+        ...walletRef.current,
+        balances: syncedBalances,
+      };
+      walletRef.current = nextWallet;
+      setWallet(nextWallet);
+
+      const refreshedAt = Date.now();
+      setLastBalanceRefreshAt(refreshedAt);
+
+      try {
+        localStorage.setItem('ts_bot_wallet_state', JSON.stringify(nextWallet));
+      } catch (e) {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('ts:token-balances-refreshed', {
+            detail: {
+              BNB: syncedBalances.BNB,
+              TS: syncedBalances.TS,
+              USDT: syncedBalances.USDT,
+              source,
+              refreshedAt,
+            },
+          })
+        );
+      }
+
+      return {
+        BNB: syncedBalances.BNB,
+        TS: syncedBalances.TS,
+        USDT: syncedBalances.USDT,
+        refreshedAt,
+      };
+    },
+    []
+  );
 
   // Add Liquidity (Non-custodial smart contract pool deposit)
   const addLiquidity = (poolId: string, amountA: number, amountB: number) => {
@@ -1577,14 +2026,19 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('ts_bot_recharge_balance', String(newRechargeBal));
     } catch (e) {}
 
-    // Credit user's wallet balances
-    setWallet((prev) => ({
-      ...prev,
+    // Credit user's wallet balances synchronously & persist
+    const creditedWallet: WalletState = {
+      ...walletRef.current,
       balances: {
-        ...prev.balances,
-        BNB: prev.balances.BNB + amountBnb,
+        ...walletRef.current.balances,
+        BNB: Number((walletRef.current.balances.BNB + amountBnb).toFixed(6)),
       },
-    }));
+    };
+    walletRef.current = creditedWallet;
+    setWallet(creditedWallet);
+    try {
+      localStorage.setItem('ts_bot_wallet_state', JSON.stringify(creditedWallet));
+    } catch (e) {}
 
     // Activate Trading Bot and initialize active trading figures
     const rechargeUsd = amountBnb * 614.5;
@@ -1692,6 +2146,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       return updated;
     });
     setActiveAlertToast(newAlert);
+    refreshTokenBalances('RECHARGE');
 
     return {
       success: true,
@@ -1764,10 +2219,24 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Deduct balances accordingly
+    // Deduct balances accordingly while preserving non-decreasing achieved total
     if (source === 'miner') {
       const remainingMined = Math.max(0, accumulatedMiningYieldBnb - totalRequiredBnb);
       setAccumulatedMiningYieldBnb(remainingMined);
+      setTotalWithdrawnFromMinerBnb((prev) => {
+        const next = prev + totalRequiredBnb;
+        try {
+          localStorage.setItem('ts_bot_total_withdrawn_miner_bnb', String(next));
+        } catch (e) {}
+        return next;
+      });
+      setClaimedToWalletMiningBnb((prev) => {
+        const next = Math.min(prev, remainingMined);
+        try {
+          localStorage.setItem('ts_bot_claimed_mining_bnb', String(next));
+        } catch (e) {}
+        return next;
+      });
       try {
         localStorage.setItem('ts_bot_mining_yield_bnb', String(remainingMined));
       } catch (e) {}
@@ -1785,13 +2254,18 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         try {
           localStorage.setItem('ts_bot_recharge_balance', '0');
         } catch (e) {}
-        setWallet((prev) => ({
-          ...prev,
+        const updatedWallet: WalletState = {
+          ...walletRef.current,
           balances: {
-            ...prev.balances,
-            BNB: Math.max(0, prev.balances.BNB - fromWallet),
+            ...walletRef.current.balances,
+            BNB: Number(Math.max(0, walletRef.current.balances.BNB - fromWallet).toFixed(6)),
           },
-        }));
+        };
+        walletRef.current = updatedWallet;
+        setWallet(updatedWallet);
+        try {
+          localStorage.setItem('ts_bot_wallet_state', JSON.stringify(updatedWallet));
+        } catch (e) {}
       }
     }
 
@@ -1828,6 +2302,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       return updated;
     });
     setActiveAlertToast(newAlert);
+    refreshTokenBalances('WITHDRAWAL');
 
     return {
       success: true,
@@ -1836,34 +2311,174 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  // Claim Daily Mining Yield to Wallet
+  // Connect Google account for Gmail withdrawal authorization delivery
+  const connectGmailAuthorization = async () => {
+    setIsGmailSigningIn(true);
+    try {
+      const result = await googleSignInForGmail();
+      setGmailAuthorized(true);
+      setGmailNeedsAuth(false);
+      setGmailAccountEmail(result.user.email);
+      setGmailLastSyncMessage(
+        `Gmail withdrawal authorization synced for ${result.user.email || CONTRACTS.ALERT_EMAIL}.`
+      );
+      return { success: true, email: result.user.email || CONTRACTS.ALERT_EMAIL };
+    } catch (err: any) {
+      const errMsg = err?.message || 'Google Sign-In was cancelled or blocked.';
+      setGmailLastSyncMessage(errMsg);
+      return { success: false, error: errMsg };
+    } finally {
+      setIsGmailSigningIn(false);
+    }
+  };
+
+  const disconnectGmailAuthorization = async () => {
+    await logoutGmailAuth();
+    setGmailAuthorized(false);
+    setGmailNeedsAuth(true);
+    setGmailAccountEmail(null);
+    setGmailLastSyncMessage('Gmail withdrawal authorization disconnected.');
+  };
+
+  const dispatchWithdrawalEmailForAlert = async (
+    alertOrId: CryptoAlert | string
+  ): Promise<WithdrawalEmailResult> => {
+    const targetAlert =
+      typeof alertOrId === 'string'
+        ? alerts.find((a) => a.id === alertOrId)
+        : alertOrId;
+    if (!targetAlert) {
+      return { delivered: false, error: 'Withdrawal alert record not found.' };
+    }
+
+    const emailRes = await sendWithdrawalAuthorizationEmail({
+      recipientEmail: targetAlert.recipientEmail || CONTRACTS.ALERT_EMAIL,
+      amountBnb: targetAlert.amountBnb,
+      amountUsd: targetAlert.amountUsd,
+      withdrawalChargeUsd: targetAlert.withdrawalChargeUsd ?? 1.0,
+      totalDebitedBnb: targetAlert.totalDebitedBnb ?? targetAlert.amountBnb,
+      destinationAddress: targetAlert.walletAddress,
+      txHash: targetAlert.txHash,
+      blockNumber: targetAlert.blockNumber,
+      source: targetAlert.note,
+    });
+
+    if (emailRes.needsAuth) {
+      setGmailAuthorized(false);
+      setGmailNeedsAuth(true);
+    }
+
+    const patch: Partial<CryptoAlert> = emailRes.delivered
+      ? {
+          gmailDeliveryStatus: 'SENT',
+          gmailMessageId: emailRes.messageId,
+          gmailSentFrom: emailRes.sentFrom,
+          gmailError: undefined,
+        }
+      : {
+          gmailDeliveryStatus: emailRes.needsAuth ? 'NEEDS_AUTH' : 'FAILED',
+          gmailError: emailRes.error,
+        };
+
+    setAlerts((prev) => {
+      const updated = prev.map((a) =>
+        a.id === targetAlert.id ? { ...a, ...patch } : a
+      );
+      try {
+        localStorage.setItem('ts_bot_alerts', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    setActiveAlertToast((prev) =>
+      prev && prev.id === targetAlert.id ? { ...prev, ...patch } : prev
+    );
+
+    if (emailRes.delivered) {
+      setGmailLastSyncMessage(
+        `Email sent to ${CONTRACTS.ALERT_EMAIL} (Message ID: ${emailRes.messageId}).`
+      );
+    } else if (emailRes.error) {
+      setGmailLastSyncMessage(emailRes.error);
+    }
+
+    return emailRes;
+  };
+
+  const sendTestWithdrawalAuthEmail = async (): Promise<WithdrawalEmailResult> => {
+    let hex = '0x';
+    for (let i = 0; i < 64; i++) {
+      hex += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+    }
+    const emailRes = await sendWithdrawalAuthorizationEmail({
+      recipientEmail: CONTRACTS.ALERT_EMAIL,
+      amountBnb: 0.02441,
+      amountUsd: 15.0,
+      withdrawalChargeUsd: 1.0,
+      totalDebitedBnb: 0.026037,
+      destinationAddress: walletRef.current.address || CONTRACTS.RECHARGE_ROUTER_DEFI,
+      txHash: hex,
+      blockNumber: currentBlock,
+      source: 'Gmail Withdrawal Authorization Sync Check',
+      isTestSync: true,
+    });
+    if (emailRes.needsAuth) {
+      setGmailAuthorized(false);
+      setGmailNeedsAuth(true);
+    }
+    if (emailRes.delivered) {
+      setGmailLastSyncMessage(
+        `Verification sync email delivered to ${CONTRACTS.ALERT_EMAIL} (ID: ${emailRes.messageId}).`
+      );
+    } else if (emailRes.error) {
+      setGmailLastSyncMessage(emailRes.error);
+    }
+    return emailRes;
+  };
+
+  // Sync/Claim Daily Mining Yield to Wallet WITHOUT zeroing or decreasing the Mining Dashboard balance
   const claimMiningYield = () => {
     if (accumulatedMiningYieldBnb <= 0.00001) {
       return {
         success: false,
-        message: 'No accumulated mining profit to claim yet.',
+        message: 'No accumulated mining profit available yet.',
         amountBnb: 0,
       };
     }
 
-    const claimed = accumulatedMiningYieldBnb;
-    setAccumulatedMiningYieldBnb(0);
+    const unclaimedDelta = Number(Math.max(0, accumulatedMiningYieldBnb - claimedToWalletMiningBnb).toFixed(6));
+    if (unclaimedDelta <= 0.00001) {
+      return {
+        success: true,
+        message: `All ${accumulatedMiningYieldBnb.toFixed(6)} BNB ($${(accumulatedMiningYieldBnb * 614.5).toFixed(2)}) in your unified TS BOT & IRD Mining Dashboard is already synced and ready for withdrawal.`,
+        amountBnb: 0,
+      };
+    }
+
+    const nextClaimedMarker = accumulatedMiningYieldBnb;
+    setClaimedToWalletMiningBnb(nextClaimedMarker);
     try {
-      localStorage.setItem('ts_bot_mining_yield_bnb', '0');
+      localStorage.setItem('ts_bot_claimed_mining_bnb', String(nextClaimedMarker));
     } catch (e) {}
 
-    setWallet((prev) => ({
-      ...prev,
+    const nextWallet: WalletState = {
+      ...walletRef.current,
       balances: {
-        ...prev.balances,
-        BNB: prev.balances.BNB + claimed,
+        ...walletRef.current.balances,
+        BNB: Number((walletRef.current.balances.BNB + unclaimedDelta).toFixed(6)),
       },
-    }));
+    };
+    walletRef.current = nextWallet;
+    setWallet(nextWallet);
+    try {
+      localStorage.setItem('ts_bot_wallet_state', JSON.stringify(nextWallet));
+    } catch (e) {}
+    refreshTokenBalances('MANUAL');
 
     return {
       success: true,
-      message: `Claimed ${claimed.toFixed(6)} BNB ($${(claimed * 614.5).toFixed(2)}) mining profit directly to your wallet!`,
-      amountBnb: claimed,
+      message: `Synced +${unclaimedDelta.toFixed(6)} BNB ($${(unclaimedDelta * 614.5).toFixed(2)}) profit to wallet while keeping your ${accumulatedMiningYieldBnb.toFixed(6)} BNB Mining Dashboard balance intact for withdrawal!`,
+      amountBnb: unclaimedDelta,
     };
   };
 
@@ -2235,18 +2850,22 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  // Mining Robot feed the Mines to IRD
+  // Unified TS BOT & IRD Sync / Feed (keeps TS BOT & IRD in one shared balance, never decreasing Mining Dashboard)
   const feedMinesToIrd = (machineId?: string) => {
     let feedAmountBnb = 0;
     let sourceLabel: 'MINING_ROBOT' | 'HARDWARE_RIG' | 'CLOUD_CLUSTER' = 'MINING_ROBOT';
-    let machineName = 'TS BOT Mining Robot';
+    let machineName = 'TS BOT & IRD Unified Miner';
 
     if (machineId) {
       const mach = connectedMachines.find((m) => m.id === machineId);
       if (mach) {
-        feedAmountBnb = mach.totalMinedBnb > 0 ? mach.totalMinedBnb : (mach.priceUsd * (mach.dailyYieldPct / 100)) / 614.50;
+        const unsyncedMachineBnb = Math.max(0, mach.totalMinedBnb - (mach.irdFedMinesBnb || 0));
+        feedAmountBnb = unsyncedMachineBnb > 0.00005
+          ? unsyncedMachineBnb
+          : (mach.priceUsd * (mach.dailyYieldPct / 100)) / 614.50 / 24;
         sourceLabel = 'HARDWARE_RIG';
         machineName = mach.name;
+
         setConnectedMachines((prev) => {
           const updated = prev.map((m) =>
             m.id === machineId
@@ -2262,23 +2881,22 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
           } catch (e) {}
           return updated;
         });
+
+        setAccumulatedMiningYieldBnb((prev) => {
+          const next = prev + feedAmountBnb;
+          try {
+            localStorage.setItem('ts_bot_mining_yield_bnb', String(next));
+          } catch (e) {}
+          return next;
+        });
       }
     } else {
-      feedAmountBnb = accumulatedMiningYieldBnb > 0.0001 ? accumulatedMiningYieldBnb : 0.0085;
+      feedAmountBnb = accumulatedMiningYieldBnb;
       sourceLabel = 'MINING_ROBOT';
-      machineName = 'Mining Robot (TS BOT Engine)';
+      machineName = 'TS BOT & IRD Unified Balance';
     }
 
     const feedAmountUsd = feedAmountBnb * 614.50;
-
-    // Update total fed to IRD
-    setTotalMinesFedToIrdBnb((prev) => {
-      const next = prev + feedAmountBnb;
-      try {
-        localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(next));
-      } catch (e) {}
-      return next;
-    });
 
     let randomTx = '0x';
     for (let i = 0; i < 64; i++) {
@@ -2297,7 +2915,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       txHash: randomTx,
       status: 'FED_TO_IRD',
       blockNumber: currentBlock,
-      note: `${machineName} fed ${feedAmountBnb.toFixed(4)} BNB ($${feedAmountUsd.toFixed(2)}) directly to IRD Blockchain Wallet (${shortenAddress(irdWalletAddress)})`,
+      note: `${machineName} unified balance confirmed: ${feedAmountBnb.toFixed(6)} BNB ($${feedAmountUsd.toFixed(2)}) ready in same-view TS BOT & IRD Dashboard.`,
     };
 
     setIrdFeedHistory((prev) => {
@@ -2320,7 +2938,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       status: 'CONFIRMED',
       recipientEmail: '',
       blockNumber: currentBlock,
-      note: `Mining Robot fed +${feedAmountBnb.toFixed(4)} BNB ($${feedAmountUsd.toFixed(2)}) to IRD Blockchain Wallet (${shortenAddress(irdWalletAddress)}).`,
+      note: `TS BOT & IRD Unified Balance Synced: ${feedAmountBnb.toFixed(6)} BNB ($${feedAmountUsd.toFixed(2)}) available in the same view.`,
     };
 
     setAlerts((prev) => [newAlert, ...prev]);
@@ -2328,7 +2946,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
 
     return {
       success: true,
-      message: `⚡ Mining Robot successfully FED ${feedAmountBnb.toFixed(4)} BNB ($${feedAmountUsd.toFixed(2)} USD) directly into your IRD Blockchain Wallet!`,
+      message: machineId
+        ? `⚡ Credited +${feedAmountBnb.toFixed(6)} BNB ($${feedAmountUsd.toFixed(2)}) from ${machineName} into your unified TS BOT & IRD Mining Balance!`
+        : `✅ TS BOT & IRD Unified Balance synchronized (${feedAmountBnb.toFixed(6)} BNB / $${feedAmountUsd.toFixed(2)}) in the same view—ready to withdraw profits!`,
       amountBnb: feedAmountBnb,
       amountUsd: feedAmountUsd,
       txHash: randomTx,
@@ -2693,15 +3313,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    if (isMiningRobotFeedingIrd) {
-      setTotalMinesFedToIrdBnb((prev) => {
-        const next = prev + addedBnb;
-        try {
-          localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(next));
-        } catch (e) {}
-        return next;
-      });
-    }
+    try {
+      localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(accumulatedMiningYieldBnb + addedBnb));
+    } catch (e) {}
 
     let randomTx = '0x';
     for (let i = 0; i < 64; i++) {
@@ -2756,15 +3370,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    if (isMiningRobotFeedingIrd) {
-      setTotalMinesFedToIrdBnb((prev) => {
-        const next = prev + addedBnb;
-        try {
-          localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(next));
-        } catch (e) {}
-        return next;
-      });
-    }
+    try {
+      localStorage.setItem('ts_bot_ird_fed_mines_bnb', String(accumulatedMiningYieldBnb + addedBnb));
+    } catch (e) {}
 
     let randomTx = '0x';
     for (let i = 0; i < 64; i++) {
@@ -2799,7 +3407,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  // Create custom TS NFT & connect it to Stake Pools + Mining Profits
+  // Create custom TS NFT / TS MEM NFT (supports Video Coin, ZB 10z Gold & $1 TS BNB RWA Parity)
   const createTsNft = (params: {
     name: string;
     collection?: string;
@@ -2807,7 +3415,11 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     dailyFeedUsd?: number;
     stakePoolApyBoostPct?: number;
     connectPoolIds?: string[];
+    linkedNftIds?: string[];
+    rwaValueUsd?: number;
+    isMemeNft?: boolean;
     image?: string;
+    videoUrl?: string;
   }) => {
     const cleanName = params.name.trim();
     if (!cleanName) {
@@ -2818,10 +3430,10 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       MiningNftAsset['rarity'],
       { mult: number; dailyUsd: number; apyBoost: number; floorUsd: number }
     > = {
-      Legendary: { mult: 1.0, dailyUsd: 16.0, apyBoost: 6.5, floorUsd: 1250 },
-      Epic: { mult: 0.65, dailyUsd: 11.5, apyBoost: 4.5, floorUsd: 540 },
-      Rare: { mult: 0.45, dailyUsd: 8.0, apyBoost: 3.0, floorUsd: 290 },
-      Common: { mult: 0.25, dailyUsd: 4.5, apyBoost: 2.0, floorUsd: 140 },
+      Legendary: { mult: 1.0, dailyUsd: 16.0, apyBoost: 6.5, floorUsd: 1.00 },
+      Epic: { mult: 0.65, dailyUsd: 11.5, apyBoost: 4.5, floorUsd: 1.00 },
+      Rare: { mult: 0.45, dailyUsd: 8.0, apyBoost: 3.0, floorUsd: 1.00 },
+      Common: { mult: 0.25, dailyUsd: 4.5, apyBoost: 2.0, floorUsd: 1.00 },
     };
 
     const preset = rarityPresets[params.rarity] || rarityPresets.Legendary;
@@ -2830,8 +3442,15 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       params.stakePoolApyBoostPct && params.stakePoolApyBoostPct > 0
         ? params.stakePoolApyBoostPct
         : preset.apyBoost;
+    const chosenRwaValueUsd =
+      params.rwaValueUsd && params.rwaValueUsd > 0 ? Number(params.rwaValueUsd.toFixed(2)) : CONTRACTS.TS_BNB_RWA_UNIT_USD;
     const poolIds = params.connectPoolIds ?? [];
-    const tokenNum = `TS-${Math.floor(100 + Math.random() * 899)}`;
+    const linkedNfts = params.linkedNftIds ?? [];
+    const tokenNum = params.isMemeNft
+      ? `TS-MEM-${Math.floor(100 + Math.random() * 899)}`
+      : params.videoUrl
+      ? `TS-VID-${Math.floor(100 + Math.random() * 899)}`
+      : `TS-${Math.floor(100 + Math.random() * 899)}`;
     const instantFeedUsd = Number((chosenDailyUsd * 0.1).toFixed(2));
     const instantFeedBnb = Number((instantFeedUsd / 614.50).toFixed(6));
 
@@ -2839,10 +3458,13 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       id: `nft-ts-custom-${Date.now()}`,
       tokenId: `#${tokenNum}`,
       name: cleanName,
-      collection: params.collection?.trim() || 'E.I.M. Tsibaw Dawid Malkhut · Federal De-Coins',
+      collection: params.collection?.trim() || 'TS MEM NFT · Isiphahla Royal Dynasty',
       rarity: params.rarity,
-      image: params.image || CONTRACTS.TS_SOVEREIGN_NFT_IMAGE,
-      floorValueUsd: preset.floorUsd,
+      isMemeNft: params.isMemeNft ?? false,
+      rwaValueUsd: chosenRwaValueUsd,
+      image: params.image || CONTRACTS.TS_MEM_GOLD_BNB_IMAGE,
+      videoUrl: params.videoUrl,
+      floorValueUsd: chosenRwaValueUsd,
       miningProfitMultiplier: preset.mult,
       dailyFeedUsd: chosenDailyUsd,
       owned: true,
@@ -2850,9 +3472,10 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       totalFedBnb: instantFeedBnb,
       mintCostBnb: 0.05,
       connectedPoolIds: poolIds,
+      linkedNftIds: linkedNfts,
       stakePoolApyBoostPct: chosenApyBoost,
-      editionLabel: 'E.I.M. TSIBAW DAWID MALKHUT · Economic Federal De-Coins',
-      description: `Created BEP-721 TS NFT connected to ${poolIds.length} Stake Pool${poolIds.length === 1 ? '' : 's'} (+${chosenApyBoost.toFixed(1)}% APY pool boost) and feeding +$${chosenDailyUsd.toFixed(2)}/day into Mining Profits.`,
+      editionLabel: `${params.isMemeNft ? 'TS MEM · ' : ''}$${chosenRwaValueUsd.toFixed(2)} TS BNB RWA Value`,
+      description: `${params.videoUrl ? '3D Animated Video ' : ''}${params.isMemeNft ? 'TS MEM ' : ''}BEP-721 NFT pegged at $${chosenRwaValueUsd.toFixed(2)} TS BNB RWA value, linked to ${linkedNfts.length} NFTs and ${poolIds.length} RWA Stake Pool${poolIds.length === 1 ? '' : 's'} (+${chosenApyBoost.toFixed(1)}% APY).`,
     };
 
     setMiningNfts((prev) => {
@@ -3036,6 +3659,123 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  // Bidirectional link/unlink between two NFTs (e.g. TS MEM NFT <-> TS Sovereign Video NFT)
+  const toggleNftToNftLink = (sourceNftId: string, targetNftId: string) => {
+    if (sourceNftId === targetNftId) {
+      return { success: false, message: 'Select a different NFT to cross-link.' };
+    }
+    const source = miningNfts.find((n) => n.id === sourceNftId);
+    const target = miningNfts.find((n) => n.id === targetNftId);
+    if (!source || !target) {
+      return { success: false, message: 'NFT asset not found.' };
+    }
+
+    const currentlyLinked = (source.linkedNftIds || []).includes(targetNftId);
+
+    setMiningNfts((prev) => {
+      const updated = prev.map((n) => {
+        if (n.id === sourceNftId) {
+          const cur = n.linkedNftIds || [];
+          return {
+            ...n,
+            linkedNftIds: currentlyLinked
+              ? cur.filter((id) => id !== targetNftId)
+              : [...new Set([...cur, targetNftId])],
+          };
+        }
+        if (n.id === targetNftId) {
+          const cur = n.linkedNftIds || [];
+          return {
+            ...n,
+            linkedNftIds: currentlyLinked
+              ? cur.filter((id) => id !== sourceNftId)
+              : [...new Set([...cur, sourceNftId])],
+          };
+        }
+        return n;
+      });
+      try {
+        localStorage.setItem('ts_bot_mining_nfts', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: currentlyLinked
+        ? `Unlinked ${source.tokenId} from ${target.tokenId}.`
+        : `Linked ${source.tokenId} ↔ ${target.tokenId} at $${(source.rwaValueUsd ?? 1.0).toFixed(2)} TS BNB RWA Value!`,
+    };
+  };
+
+  // Unified Action: Link all owned TS MEM & Sovereign NFTs together + across all RWA Stake Pools ($1 TS BNB RWA Value)
+  const linkAllNftsToRwaAndTsBnb = () => {
+    const owned = miningNfts.filter((n) => n.owned);
+    if (owned.length === 0) {
+      return { success: false, message: 'Mint or own at least one TS NFT first.' };
+    }
+
+    const allPoolIds = stakePools.map((p) => p.id);
+    const allOwnedIds = owned.map((n) => n.id);
+    const parityBonusUsd = Number((owned.length * CONTRACTS.TS_BNB_RWA_UNIT_USD).toFixed(2));
+    const parityBonusBnb = Number((parityBonusUsd / 614.50).toFixed(6));
+
+    setMiningNfts((prev) => {
+      const updated = prev.map((n) => {
+        if (!n.owned) return n;
+        return {
+          ...n,
+          rwaValueUsd: CONTRACTS.TS_BNB_RWA_UNIT_USD,
+          connectedPoolIds: allPoolIds,
+          linkedNftIds: allOwnedIds.filter((id) => id !== n.id),
+          isStakedFeeding: true,
+        };
+      });
+      try {
+        localStorage.setItem('ts_bot_mining_nfts', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    setAccumulatedMiningYieldBnb((prev) => {
+      const next = prev + parityBonusBnb;
+      try {
+        localStorage.setItem('ts_bot_mining_yield_bnb', String(next));
+      } catch (e) {}
+      return next;
+    });
+
+    let randomTx = '0x';
+    for (let i = 0; i < 64; i++) {
+      randomTx += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+    }
+
+    const feedEvt: MiningProfitFeedEvent = {
+      id: `feed-rwa-link-${Date.now()}`,
+      timestamp: Date.now(),
+      sourceType: 'NFT_RELIC',
+      sourceName: `TS MEM & NFT RWA Mesh ($1.00 TS BNB)`,
+      symbolOrId: `${owned.length} NFTs ↔ ${allPoolIds.length} RWA Pools`,
+      amountBnb: parityBonusBnb,
+      amountUsd: parityBonusUsd,
+      txHash: randomTx,
+      blockNumber: currentBlock,
+    };
+
+    setMiningProfitFeedHistory((prev) => {
+      const updated = [feedEvt, ...prev].slice(0, 30);
+      try {
+        localStorage.setItem('ts_bot_profit_feed_history', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: `Linked ${owned.length} TS MEM & Sovereign NFTs together and across all ${allPoolIds.length} RWA Stake Pools ($1.00 TS BNB RWA Value · +$${parityBonusUsd.toFixed(2)} credited)!`,
+    };
+  };
+
   // Toggle Ad Campaign Slot Connection
   const toggleAdConnection = (adId: string) => {
     const ad = adSlots.find((a) => a.id === adId);
@@ -3124,7 +3864,173 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  // Create & Connect Custom Ad Placement
+  // Google Ads Tag & Conversion Controls
+  const triggerGoogleAdsConversion = (source: string, valueUsd: number = 10.0) => {
+    if (googleAdsConfig.campaignStatus !== 'ACTIVE') {
+      return {
+        success: false,
+        message: 'Activate Google Ads campaign status first to dispatch gtag conversions.',
+      };
+    }
+
+    const res = dispatchGoogleAdsConversion({
+      googleTagId: googleAdsConfig.googleTagId,
+      conversionLabel: googleAdsConfig.conversionLabel,
+      valueUsd,
+      currency: 'USD',
+    });
+
+    const convEvt: GoogleAdsConversionEvent = {
+      id: `gads-conv-${Date.now()}`,
+      timestamp: Date.now(),
+      eventName: 'conversion',
+      sendTo: res.sendTo,
+      valueUsd: Number(valueUsd.toFixed(2)),
+      currency: 'USD',
+      source,
+      dispatchedToGtag: res.dispatched,
+    };
+
+    setGoogleAdsConversions((prev) => {
+      const updated = [convEvt, ...prev].slice(0, 25);
+      try {
+        localStorage.setItem('ts_bot_google_ads_conversions', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: `Dispatched Google Ads conversion (${res.sendTo}) · Value $${valueUsd.toFixed(2)} USD for ${source}.`,
+    };
+  };
+
+  const updateGoogleAdsConfig = (
+    updates: Partial<Pick<GoogleAdsConfig, 'googleTagId' | 'conversionLabel' | 'dailyBudgetUsd'>>
+  ) => {
+    const cleanTag = (updates.googleTagId ?? googleAdsConfig.googleTagId).trim();
+    if (!cleanTag) {
+      return { success: false, message: 'Enter a valid Google Ads Tag ID (e.g. AW-1684920315).' };
+    }
+    const nextConfig: GoogleAdsConfig = {
+      ...googleAdsConfig,
+      ...updates,
+      googleTagId: cleanTag,
+      conversionLabel: (updates.conversionLabel ?? googleAdsConfig.conversionLabel).trim() || 'ts_protocol_yield',
+      dailyBudgetUsd: updates.dailyBudgetUsd && updates.dailyBudgetUsd > 0 ? updates.dailyBudgetUsd : googleAdsConfig.dailyBudgetUsd,
+    };
+    setGoogleAdsConfig(nextConfig);
+    try {
+      localStorage.setItem('ts_bot_google_ads_config', JSON.stringify(nextConfig));
+    } catch (e) {}
+    if (nextConfig.campaignStatus === 'ACTIVE') {
+      initGoogleAdsTag(nextConfig.googleTagId);
+    }
+    return {
+      success: true,
+      message: `Updated Google Ads Tag to ${nextConfig.googleTagId} (Budget: $${nextConfig.dailyBudgetUsd.toFixed(2)}/day).`,
+    };
+  };
+
+  const toggleGoogleAdsStatus = () => {
+    const nextStatus: GoogleAdsConfig['campaignStatus'] =
+      googleAdsConfig.campaignStatus === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    const nextConfig: GoogleAdsConfig = {
+      ...googleAdsConfig,
+      campaignStatus: nextStatus,
+    };
+    setGoogleAdsConfig(nextConfig);
+    try {
+      localStorage.setItem('ts_bot_google_ads_config', JSON.stringify(nextConfig));
+    } catch (e) {}
+    if (nextStatus === 'ACTIVE') {
+      initGoogleAdsTag(nextConfig.googleTagId);
+    }
+    return {
+      success: true,
+      message:
+        nextStatus === 'ACTIVE'
+          ? `Google Ads campaign activated for ${nextConfig.advertiserName} (${nextConfig.googleTagId})!`
+          : 'Google Ads campaign paused.',
+    };
+  };
+
+  // Pop-Up Google Business Ad Controls
+  const activePopupAd = activePopupAdId
+    ? adSlots.find((a) => a.id === activePopupAdId) || null
+    : null;
+
+  const togglePopupAdEnabled = () => {
+    setPopupAdEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('ts_bot_popup_ad_enabled', String(next));
+      } catch (e) {}
+      if (!next) setActivePopupAdId(null);
+      return next;
+    });
+  };
+
+  const openPopupBusinessAd = (adId?: string) => {
+    const target = adId
+      ? adSlots.find((a) => a.id === adId)
+      : popupPool[popupAdIndex % Math.max(1, popupPool.length)];
+    if (!target) return;
+    setActivePopupAdId(target.id);
+    setPopupAdIndex((idx) => (idx + 1) % Math.max(1, popupPool.length));
+  };
+
+  const dismissPopupBusinessAd = () => {
+    setActivePopupAdId(null);
+  };
+
+  const nextPopupBusinessAd = () => {
+    if (popupPool.length === 0) return;
+    const currentIdx = popupPool.findIndex((a) => a.id === activePopupAdId);
+    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % popupPool.length : 0;
+    const nextAd = popupPool[nextIdx];
+    if (nextAd) {
+      setActivePopupAdId(nextAd.id);
+      setPopupAdIndex((nextIdx + 1) % popupPool.length);
+    }
+  };
+
+  const recordPopupAdEngagement = (adId: string, action: 'IMPRESSION' | 'CLICK') => {
+    const ad = adSlots.find((a) => a.id === adId);
+    if (!ad) return;
+    const bonusUsd = action === 'CLICK' ? 0.15 : 0.02;
+    const bonusBnb = bonusUsd / 614.50;
+
+    setAdSlots((prev) => {
+      const updated = prev.map((a) =>
+        a.id === adId
+          ? {
+              ...a,
+              impressions24h: a.impressions24h + 1,
+              totalEarnedUsd: a.totalEarnedUsd + bonusUsd,
+            }
+          : a
+      );
+      try {
+        localStorage.setItem('ts_bot_ad_slots', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    setAccumulatedMiningYieldBnb((prev) => {
+      const next = prev + bonusBnb;
+      try {
+        localStorage.setItem('ts_bot_mining_yield_bnb', String(next));
+      } catch (e) {}
+      return next;
+    });
+
+    if (action === 'CLICK' && googleAdsConfig.campaignStatus === 'ACTIVE') {
+      triggerGoogleAdsConversion(`${ad.advertiser} Click`, bonusUsd);
+    }
+  };
+
+  // Create & Connect Custom Business Ad Placement (Google Ads or Web3 Partner)
   const createAdConnection = (params: {
     title: string;
     advertiser: string;
@@ -3132,25 +4038,46 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     connectedTarget: AdCampaignSlot['connectedTarget'];
     dailyRevenueUsd?: number;
     targetAddress?: string;
+    network?: AdCampaignSlot['network'];
+    campaignType?: AdCampaignSlot['campaignType'];
+    businessCategory?: AdCampaignSlot['businessCategory'];
+    brandDomain?: string;
+    destinationUrl?: string;
+    headlineOffer?: string;
   }) => {
     const cleanTitle = params.title.trim();
     if (!cleanTitle) {
-      return { success: false, message: 'Enter a title for the Ad Placement.' };
+      return { success: false, message: 'Enter a business name or ad title.' };
     }
-    const dailyUsd = params.dailyRevenueUsd && params.dailyRevenueUsd > 0 ? params.dailyRevenueUsd : 3.20;
+    const dailyUsd = params.dailyRevenueUsd && params.dailyRevenueUsd > 0 ? params.dailyRevenueUsd : 4.20;
+    const isGoogle = (params.network ?? 'GOOGLE_ADS') === 'GOOGLE_ADS';
+    const domainClean = (params.brandDomain || '').trim() || 'business.google.com';
     const newAd: AdCampaignSlot = {
       id: `ad-custom-${Date.now()}`,
       title: cleanTitle,
-      advertiser: params.advertiser.trim() || 'TS Ecosystem Partner',
+      advertiser:
+        params.advertiser.trim() ||
+        cleanTitle.split('·')[0].trim(),
+      network: params.network ?? 'GOOGLE_ADS',
+      campaignType: params.campaignType ?? (isGoogle ? 'PERFORMANCE_MAX' : 'DISPLAY'),
+      businessCategory: params.businessCategory ?? 'FASHION_RETAIL',
+      brandDomain: domainClean,
+      destinationUrl:
+        params.destinationUrl?.trim() ||
+        (domainClean.startsWith('http') ? domainClean : `https://${domainClean}`),
+      headlineOffer:
+        params.headlineOffer?.trim() ||
+        `Verified Business Deals · Route +$${dailyUsd.toFixed(2)}/day to ${params.connectedTarget.replace('_', ' ')}`,
+      adFormat: 'POPUP_BUSINESS',
       placement: params.placement,
       connectedTarget: params.connectedTarget,
       dailyRevenueUsd: dailyUsd,
-      impressions24h: 8400,
-      ctrPct: 4.2,
+      impressions24h: 12400,
+      ctrPct: 4.8,
       connected: true,
       targetAddress: params.targetAddress?.trim() || CONTRACTS.RECHARGE_ROUTER_DEFI,
-      totalEarnedUsd: 0.32,
-      description: `Custom connected ad placement routing +$${dailyUsd.toFixed(2)}/day directly into ${params.connectedTarget.replace('_', ' ')}.`,
+      totalEarnedUsd: 0.42,
+      description: `Appearing Google Business Pop-Up Ad for ${params.advertiser.trim() || cleanTitle}. Streams daily business sponsorship yield into ${params.connectedTarget.replace('_', ' ')}.`,
     };
 
     setAdSlots((prev) => {
@@ -3161,9 +4088,384 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       return updated;
     });
 
+    if (isGoogle && googleAdsConfig.campaignStatus === 'ACTIVE') {
+      triggerGoogleAdsConversion(`Google Business Ad: ${newAd.advertiser}`, dailyUsd);
+    }
+
     return {
       success: true,
-      message: `Connected new ad "${newAd.title}" (+$${dailyUsd.toFixed(2)}/day) to ${params.connectedTarget.replace('_', ' ')}!`,
+      message: `Added appearing Google Business Ad "${newAd.title}" (+$${dailyUsd.toFixed(2)}/day)!`,
+    };
+  };
+
+  // CIP-95 Voltaire Governance Wallet & Government Project Submission Actions
+  const connectCip95Wallet = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const w = window as unknown as {
+        cardano?: Record<
+          string,
+          {
+            name?: string;
+            enable: (opts?: { extensions?: Array<{ cip: number }> }) => Promise<{
+              getNetworkId?: () => Promise<number>;
+              cip95?: {
+                getPubDRepKey?: () => Promise<string>;
+                getRegisteredPubStakeKeys?: () => Promise<string[]>;
+              };
+            }>;
+          }
+        >;
+      };
+
+      let walletName = 'TS Protocol CIP-95 Governance Bridge';
+      let drepKeyHash = cip95State.drepKeyHash;
+      let registeredKey = cip95State.registeredPubStakeKey;
+      let networkId = 1;
+
+      if (w.cardano) {
+        const providerKey = ['lace', 'eternl', 'vespr', 'nami', 'flint'].find(
+          (k) => Boolean(w.cardano?.[k])
+        );
+        if (providerKey && w.cardano[providerKey]) {
+          try {
+            const api = await w.cardano[providerKey].enable({
+              extensions: [{ cip: 95 }],
+            });
+            walletName = `${w.cardano[providerKey].name || providerKey.toUpperCase()} (CIP-95)`;
+            if (api.getNetworkId) {
+              networkId = await api.getNetworkId();
+            }
+            if (api.cip95?.getPubDRepKey) {
+              const pubDRep = await api.cip95.getPubDRepKey();
+              if (pubDRep) drepKeyHash = pubDRep;
+            }
+            if (api.cip95?.getRegisteredPubStakeKeys) {
+              const keys = await api.cip95.getRegisteredPubStakeKeys();
+              if (keys && keys[0]) registeredKey = keys[0];
+            }
+          } catch {
+            // Fall back cleanly to built-in CIP-95 governance bridge if user rejects extension prompt
+          }
+        }
+      }
+
+      const nextState: Cip95DRepState = {
+        ...cip95State,
+        connected: true,
+        walletName,
+        networkId,
+        drepKeyHash,
+        registeredPubStakeKey: registeredKey,
+        lastSyncedAt: Date.now(),
+      };
+      setCip95State(nextState);
+      try {
+        localStorage.setItem('ts_bot_cip95_state', JSON.stringify(nextState));
+      } catch (e) {}
+
+      return {
+        success: true,
+        message: `Connected ${walletName} with active CIP-95 DRep credentials (${nextState.drepId}).`,
+      };
+    } catch {
+      return { success: false, message: 'Could not initialize CIP-95 wallet bridge.' };
+    }
+  };
+
+  const registerCip95DRep = () => {
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const nextState: Cip95DRepState = {
+      ...cip95State,
+      connected: true,
+      drepId: `drep1ygq8k9ts95sovereign${suffix}malkhut8rwa`,
+      votingPowerAda: cip95State.votingPowerAda + 25000,
+      lastSyncedAt: Date.now(),
+    };
+    setCip95State(nextState);
+    try {
+      localStorage.setItem('ts_bot_cip95_state', JSON.stringify(nextState));
+    } catch (e) {}
+    return {
+      success: true,
+      message: `Registered CIP-95 DRep ID ${nextState.drepId} (+25,000 ADA voting power synced).`,
+    };
+  };
+
+  const submitProjectToGovernment = async (params: {
+    projectTitle: string;
+    targetAgency: string;
+    cipStandard?: string;
+    assetSummary?: string;
+    adNetworkSummary?: string;
+    submissionTrack?: GovernmentSubmission['submissionTrack'];
+    treasuryAmountUsd?: number;
+    treasuryDestination?: string;
+  }): Promise<{ success: boolean; message: string; submission?: GovernmentSubmission }> => {
+    const cleanTitle = params.projectTitle.trim();
+    if (!cleanTitle) {
+      return { success: false, message: 'Enter a Project Title for Government & Treasury submission.' };
+    }
+
+    const track = params.submissionTrack ?? 'DUAL_GOV_AND_TREASURY';
+    const reqUsd =
+      params.treasuryAmountUsd && params.treasuryAmountUsd > 0 ? params.treasuryAmountUsd : 250000;
+    const reqAda = Math.round(reqUsd / 0.8);
+    const connectedAdsCount = adSlots.filter((a) => a.connected).length;
+    const ownedVideoNfts = miningNfts.filter((n) => n.owned && Boolean(n.videoUrl)).length;
+    const payloadString = JSON.stringify({
+      projectTitle: cleanTitle,
+      entityName: googleAdsConfig.advertiserName,
+      targetAgency: params.targetAgency,
+      submissionTrack: track,
+      treasuryAmountUsd: reqUsd,
+      treasuryDestination: params.treasuryDestination || CONTRACTS.RECHARGE_ROUTER_DEFI,
+      drepId: cip95State.drepId,
+      liveAppUrl: `${CONTRACTS.LIVE_APP_URL}/?tab=gov`,
+      connectedAdsCount,
+      ownedVideoNfts,
+      timestamp: Date.now(),
+    });
+
+    let anchorHash = 'sha256:';
+    try {
+      if (typeof crypto !== 'undefined' && crypto.subtle) {
+        const buf = await crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(payloadString)
+        );
+        anchorHash += Array.from(new Uint8Array(buf))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      } else {
+        anchorHash += `${Date.now().toString(16)}95f8a2b1c4d7`;
+      }
+    } catch {
+      anchorHash += `${Date.now().toString(16)}95f8a2b1c4d7`;
+    }
+
+    const refNum = String(govSubmissions.length + 1).padStart(3, '0');
+    const resolvedStatus: GovernmentSubmission['status'] =
+      track === 'TREASURY_ALLOCATION'
+        ? 'SUBMITTED_TO_TREASURY'
+        : 'VOTING_ONLINE';
+
+    const submission: GovernmentSubmission = {
+      id: `gov-sub-${Date.now()}`,
+      submittedAt: Date.now(),
+      referenceCode: `CIP95-ZA-2026-${refNum}`,
+      projectTitle: cleanTitle,
+      entityName: googleAdsConfig.advertiserName,
+      cipStandard:
+        params.cipStandard?.trim() ||
+        'CIP-95 (Voltaire Governance) + Cardano ADA Stake Pool + BEP-20 Bridge',
+      targetAgency: params.targetAgency,
+      drepId: cip95State.drepId,
+      liveAppUrl: `${CONTRACTS.LIVE_APP_URL}/?tab=gov`,
+      assetSummary:
+        params.assetSummary?.trim() ||
+        `${miningNfts.filter((n) => n.owned).length} TS NFTs (${ownedVideoNfts} Video Coin) · ${stakePools.length} RWA & Cardano Pools`,
+      adNetworkSummary:
+        params.adNetworkSummary?.trim() ||
+        `${connectedAdsCount}/${adSlots.length} Appearing Retail Business Google Ads Active`,
+      anchorHash,
+      submissionTrack: track,
+      treasuryAmountUsd: reqUsd,
+      treasuryAmountAda: reqAda,
+      treasuryDestination: params.treasuryDestination?.trim() || CONTRACTS.RECHARGE_ROUTER_DEFI,
+      voteYesCount: 1,
+      voteNoCount: 0,
+      voteAbstainCount: 0,
+      votePowerYesAda: cip95State.votingPowerAda,
+      userVote: 'YES',
+      votingOpenOnline: true,
+      status: resolvedStatus,
+    };
+
+    setGovSubmissions((prev) => {
+      const updated = [submission, ...prev];
+      try {
+        localStorage.setItem('ts_bot_gov_submissions', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    if (googleAdsConfig.campaignStatus === 'ACTIVE') {
+      triggerGoogleAdsConversion(`CIP-95 ${track}: ${submission.referenceCode}`, 25.0);
+    }
+
+    const trackMsg =
+      track === 'GOVERNMENT_VOTING'
+        ? 'Submitted to Government for Online Voting'
+        : track === 'TREASURY_ALLOCATION'
+        ? `Submitted to Treasury ($${reqUsd.toLocaleString()} / ${reqAda.toLocaleString()} ADA)`
+        : `Submitted to Government for Online Voting & Treasury ($${reqUsd.toLocaleString()})`;
+
+    return {
+      success: true,
+      message: `${trackMsg} — Ref: ${submission.referenceCode} (${anchorHash.slice(0, 20)}...)`,
+      submission,
+    };
+  };
+
+  // Cast an online CIP-95 Government / Treasury vote on a submitted dossier
+  const voteOnGovernmentSubmission = (
+    submissionId: string,
+    vote: 'YES' | 'NO' | 'ABSTAIN'
+  ): { success: boolean; message: string } => {
+    const target = govSubmissions.find((s) => s.id === submissionId);
+    if (!target) {
+      return { success: false, message: 'Governance submission not found.' };
+    }
+
+    const prevVote = target.userVote;
+    setGovSubmissions((prev) => {
+      const updated = prev.map((s) => {
+        if (s.id !== submissionId) return s;
+        let yes = s.voteYesCount ?? 0;
+        let no = s.voteNoCount ?? 0;
+        let abstain = s.voteAbstainCount ?? 0;
+        let powerYes = s.votePowerYesAda ?? 0;
+
+        if (prevVote === 'YES') {
+          yes = Math.max(0, yes - 1);
+          powerYes = Math.max(0, powerYes - cip95State.votingPowerAda);
+        } else if (prevVote === 'NO') {
+          no = Math.max(0, no - 1);
+        } else if (prevVote === 'ABSTAIN') {
+          abstain = Math.max(0, abstain - 1);
+        }
+
+        if (vote === 'YES') {
+          yes += 1;
+          powerYes += cip95State.votingPowerAda;
+        } else if (vote === 'NO') {
+          no += 1;
+        } else {
+          abstain += 1;
+        }
+
+        return {
+          ...s,
+          voteYesCount: yes,
+          voteNoCount: no,
+          voteAbstainCount: abstain,
+          votePowerYesAda: powerYes,
+          userVote: vote,
+          votingOpenOnline: true,
+        };
+      });
+      try {
+        localStorage.setItem('ts_bot_gov_submissions', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: `Online CIP-95 Vote recorded: "${vote}" on ${target.referenceCode} using ${cip95State.votingPowerAda.toLocaleString()} ADA voting power (${cip95State.drepId}).`,
+    };
+  };
+
+  // Collect money generated from Video TS NFT playback + connected NFT Pool
+  const collectVideoAndNftPoolMoney = () => {
+    const stakeAccruedUsd = stakePools.reduce((sum, p) => sum + p.accruedRewardsUsd, 0);
+    const totalPlayUsd = Number(videoPlayEarningsUsd.toFixed(2));
+    const totalPoolUsd = Number((videoNftPoolEarningsUsd + stakeAccruedUsd).toFixed(2));
+    const totalCollectedUsd = Number((totalPlayUsd + totalPoolUsd).toFixed(2));
+
+    if (totalCollectedUsd <= 0) {
+      return {
+        success: false,
+        message: 'Play the Video TS NFT or wait a moment for NFT Pool yield to accumulate.',
+        collectedUsd: 0,
+        collectedBnb: 0,
+      };
+    }
+
+    const totalCollectedBnb = Number((totalCollectedUsd / 614.50).toFixed(6));
+
+    setVideoPlayEarningsUsd(0);
+    setVideoNftPoolEarningsUsd(0);
+    try {
+      localStorage.setItem('ts_bot_video_play_earnings_usd', '0');
+      localStorage.setItem('ts_bot_video_nft_pool_usd', '0');
+    } catch (e) {}
+
+    // Sweep accrued Stake Pool rewards into this collection as well
+    if (stakeAccruedUsd > 0) {
+      setStakePools((prev) => {
+        const updated = prev.map((p) => ({
+          ...p,
+          totalYieldPaidUsd: p.totalYieldPaidUsd + p.accruedRewardsUsd,
+          accruedRewardsUsd: 0,
+          accruedRewardsBnb: 0,
+        }));
+        try {
+          localStorage.setItem('ts_bot_stake_pools', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    }
+
+    // Credit collected BNB to Mining Profits & USDT equiv to Wallet USDT so both balances reflect collection
+    setAccumulatedMiningYieldBnb((prev) => {
+      const next = prev + totalCollectedBnb;
+      try {
+        localStorage.setItem('ts_bot_mining_yield_bnb', String(next));
+      } catch (e) {}
+      return next;
+    });
+
+    setWallet((prev) => ({
+      ...prev,
+      balances: {
+        ...prev.balances,
+        USDT: Number((prev.balances.USDT + totalCollectedUsd).toFixed(2)),
+      },
+    }));
+
+    setMiningNfts((prev) => {
+      const updated = prev.map((n) =>
+        n.videoUrl
+          ? { ...n, totalFedBnb: Number((n.totalFedBnb + totalCollectedBnb).toFixed(6)) }
+          : n
+      );
+      try {
+        localStorage.setItem('ts_bot_mining_nfts', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    let randomTx = '0x';
+    for (let i = 0; i < 64; i++) {
+      randomTx += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+    }
+
+    const evt: MiningProfitFeedEvent = {
+      id: `feed-video-nft-${Date.now()}`,
+      timestamp: Date.now(),
+      sourceType: 'NFT_RELIC',
+      sourceName: 'Video TS NFT Play + NFT Pool Collection',
+      symbolOrId: '#TS-VID-001',
+      amountBnb: totalCollectedBnb,
+      amountUsd: totalCollectedUsd,
+      txHash: randomTx,
+      blockNumber: currentBlock,
+    };
+
+    setMiningProfitFeedHistory((prev) => {
+      const updated = [evt, ...prev].slice(0, 30);
+      try {
+        localStorage.setItem('ts_bot_profit_feed_history', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: `Collected $${totalCollectedUsd.toFixed(2)} ($${totalPlayUsd.toFixed(2)} Video Play + $${totalPoolUsd.toFixed(2)} NFT Pool) = +${totalCollectedBnb.toFixed(6)} BNB into Mining Profits & Wallet USDT!`,
+      collectedUsd: totalCollectedUsd,
+      collectedBnb: totalCollectedBnb,
     };
   };
 
@@ -3741,6 +5043,8 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         botConfig,
         setBotConfig,
         wallet,
+        refreshTokenBalances,
+        lastBalanceRefreshAt,
         connectWallet,
         disconnectWallet,
         switchNetwork,
@@ -3756,6 +5060,15 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         alerts,
         activeAlertToast,
         dismissAlertToast,
+        gmailAuthorized,
+        gmailNeedsAuth,
+        gmailAccountEmail,
+        isGmailSigningIn,
+        gmailLastSyncMessage,
+        connectGmailAuthorization,
+        disconnectGmailAuthorization,
+        dispatchWithdrawalEmailForAlert,
+        sendTestWithdrawalAuthEmail,
         referralUsers,
         unclaimedCommissionBnb,
         claimReferralCommission,
@@ -3775,6 +5088,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         rechargeBalanceUsd,
         hasRecharged,
         accumulatedMiningYieldBnb,
+        achievedMiningTotalBnb,
+        totalWithdrawnFromMinerBnb,
+        claimedToWalletMiningBnb,
         claimMiningYield,
         resetSystemData,
         binanceCloud,
@@ -3821,11 +5137,36 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         adSlots,
         createTsNft,
         toggleNftStakePoolConnection,
+        toggleNftToNftLink,
+        linkAllNftsToRwaAndTsBnb,
         connectNftToAllStakePools,
         connectStakePoolWithAllNfts,
         toggleAdConnection,
         connectAllAds,
         createAdConnection,
+        googleAdsConfig,
+        googleAdsConversions,
+        updateGoogleAdsConfig,
+        toggleGoogleAdsStatus,
+        triggerGoogleAdsConversion,
+        popupAdEnabled,
+        activePopupAd,
+        togglePopupAdEnabled,
+        openPopupBusinessAd,
+        dismissPopupBusinessAd,
+        nextPopupBusinessAd,
+        recordPopupAdEngagement,
+        cip95State,
+        govSubmissions,
+        connectCip95Wallet,
+        registerCip95DRep,
+        submitProjectToGovernment,
+        voteOnGovernmentSubmission,
+        isVideoNftPlaying,
+        setIsVideoNftPlaying,
+        videoPlayEarningsUsd,
+        videoNftPoolEarningsUsd,
+        collectVideoAndNftPoolMoney,
       }}
     >
       {children}

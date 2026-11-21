@@ -17,6 +17,7 @@ import {
   Link2,
   Megaphone,
   Landmark,
+  Film,
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
 import { CONTRACTS, formatUSD, MINING_FEED_RULES, shortenAddress, WITHDRAWAL_RULES } from '../data/constants';
@@ -25,11 +26,13 @@ import { AdCampaignSlot, MiningNftAsset } from '../types';
 interface AirdropsMemeNftViewProps {
   onOpenWithdrawal?: () => void;
   onGoToStakePools?: () => void;
+  onGoToGov?: () => void;
 }
 
 export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
   onOpenWithdrawal,
   onGoToStakePools,
+  onGoToGov,
 }) => {
   const {
     cloudAirdropTokens,
@@ -45,10 +48,25 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
     toggleNftFeedMining,
     createTsNft,
     toggleNftStakePoolConnection,
+    toggleNftToNftLink,
+    linkAllNftsToRwaAndTsBnb,
     connectNftToAllStakePools,
     toggleAdConnection,
     connectAllAds,
     createAdConnection,
+    googleAdsConfig,
+    googleAdsConversions,
+    updateGoogleAdsConfig,
+    toggleGoogleAdsStatus,
+    triggerGoogleAdsConversion,
+    popupAdEnabled,
+    togglePopupAdEnabled,
+    openPopupBusinessAd,
+    isVideoNftPlaying,
+    setIsVideoNftPlaying,
+    videoPlayEarningsUsd,
+    videoNftPoolEarningsUsd,
+    collectVideoAndNftPoolMoney,
     harvestAllFeedsToMiningProfits,
     wallet,
     miningFeedEnabled,
@@ -62,22 +80,39 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Create TS NFT Studio State
+  // Create TS MEM / TS NFT Studio State
   const [showCreateNft, setShowCreateNft] = useState<boolean>(true);
-  const [newNftName, setNewNftName] = useState<string>('TS Sovereign De-Coin Edition');
+  const [nftMediaPreset, setNftMediaPreset] = useState<
+    'TS_MEM_VIDEO' | 'TS_MEM_GOLD' | 'SOVEREIGN_VIDEO' | 'SOVEREIGN_GOLD'
+  >('TS_MEM_VIDEO');
+  const [newNftName, setNewNftName] = useState<string>('TS MEM · Isiphahla Royal ZEE BNB NFT');
   const [newNftCollection, setNewNftCollection] = useState<string>(
-    'E.I.M. Tsibaw Dawid Malkhut · Economic Federal De-Coins'
+    'TS MEM NFT · Isiphahla Royal Dynasty ($1 TS BNB RWA)'
   );
   const [newNftRarity, setNewNftRarity] = useState<MiningNftAsset['rarity']>('Legendary');
+  const [newNftRwaUsd, setNewNftRwaUsd] = useState<string>('1.00');
   const [selectedPoolIdsForNewNft, setSelectedPoolIdsForNewNft] = useState<string[]>(() =>
-    stakePools.slice(0, 3).map((p) => p.id)
+    stakePools.map((p) => p.id)
   );
   const [expandedNftPoolsId, setExpandedNftPoolsId] = useState<string | null>(null);
 
-  // Custom Ad Connection State
+  // Custom Business Ad & Google Ads Integration State
+  const [businessCategoryFilter, setBusinessCategoryFilter] = useState<
+    'ALL' | 'FASHION_RETAIL' | 'SUPERSTORE_TECH' | 'GROCERY_FOOD' | 'FINANCE_TELECOM'
+  >('ALL');
   const [newAdTitle, setNewAdTitle] = useState<string>('');
   const [newAdAdvertiser, setNewAdAdvertiser] = useState<string>('');
+  const [newAdBrandDomain, setNewAdBrandDomain] = useState<string>('');
+  const [newAdHeadlineOffer, setNewAdHeadlineOffer] = useState<string>('');
+  const [newAdBusinessCategory, setNewAdBusinessCategory] = useState<
+    NonNullable<AdCampaignSlot['businessCategory']>
+  >('FASHION_RETAIL');
   const [newAdTarget, setNewAdTarget] = useState<AdCampaignSlot['connectedTarget']>('STAKE_POOLS');
+  const [newAdNetwork, setNewAdNetwork] = useState<AdCampaignSlot['network']>('GOOGLE_ADS');
+  const [newAdCampaignType, setNewAdCampaignType] = useState<AdCampaignSlot['campaignType']>('DISPLAY');
+  const [tagIdInput, setTagIdInput] = useState<string>(googleAdsConfig.googleTagId);
+  const [convLabelInput, setConvLabelInput] = useState<string>(googleAdsConfig.conversionLabel);
+  const [budgetInput, setBudgetInput] = useState<string>(String(googleAdsConfig.dailyBudgetUsd));
 
   const showFeedback = (type: 'success' | 'error', text: string) => {
     setFeedback({ type, text });
@@ -102,6 +137,14 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
   const totalFedByAssetsBnb =
     cloudAirdropTokens.reduce((sum, t) => sum + t.totalFedBnb, 0) +
     miningNfts.reduce((sum, n) => sum + n.totalFedBnb, 0);
+
+  const collectableVideoAndPoolUsd = Number(
+    (
+      videoPlayEarningsUsd +
+      videoNftPoolEarningsUsd +
+      stakePools.reduce((sum, p) => sum + p.accruedRewardsUsd, 0)
+    ).toFixed(2)
+  );
 
   const query = searchQuery.trim().toLowerCase();
 
@@ -129,22 +172,42 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
 
   const filteredAds = adSlots.filter((a) => {
     if (filterTab !== 'ALL' && filterTab !== 'ADS') return false;
+    if (businessCategoryFilter !== 'ALL' && a.businessCategory !== businessCategoryFilter) return false;
     if (!query) return true;
     return (
       a.title.toLowerCase().includes(query) ||
       a.advertiser.toLowerCase().includes(query) ||
+      (a.brandDomain || '').toLowerCase().includes(query) ||
+      (a.headlineOffer || '').toLowerCase().includes(query) ||
       a.description.toLowerCase().includes(query)
     );
   });
 
   const handleCreateTsNft = (e: React.FormEvent) => {
     e.preventDefault();
+    const isMeme = nftMediaPreset === 'TS_MEM_VIDEO' || nftMediaPreset === 'TS_MEM_GOLD';
+    const selectedImage = isMeme
+      ? CONTRACTS.TS_MEM_GOLD_BNB_IMAGE
+      : CONTRACTS.TS_SOVEREIGN_NFT_IMAGE;
+    const selectedVideo =
+      nftMediaPreset === 'TS_MEM_VIDEO'
+        ? CONTRACTS.TS_MEM_VIDEO_NFT
+        : nftMediaPreset === 'SOVEREIGN_VIDEO'
+        ? CONTRACTS.TS_SOVEREIGN_VIDEO_NFT
+        : undefined;
+    const rwaUsd = Math.max(0.01, parseFloat(newNftRwaUsd) || 1.00);
+    const autoLinkedNftIds = miningNfts.filter((n) => n.owned).slice(0, 4).map((n) => n.id);
+
     const res = createTsNft({
       name: newNftName,
       collection: newNftCollection,
       rarity: newNftRarity,
       connectPoolIds: selectedPoolIdsForNewNft,
-      image: CONTRACTS.TS_SOVEREIGN_NFT_IMAGE,
+      linkedNftIds: autoLinkedNftIds,
+      rwaValueUsd: rwaUsd,
+      isMemeNft: isMeme,
+      image: selectedImage,
+      videoUrl: selectedVideo,
     });
     showFeedback(res.success ? 'success' : 'error', res.message);
     if (res.success) {
@@ -160,18 +223,37 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
 
   const handleAddCustomAd = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanedDomain = newAdBrandDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
     const res = createAdConnection({
       title: newAdTitle,
       advertiser: newAdAdvertiser,
       placement: newAdTarget === 'TS_NFT' ? 'NFT_SHOWCASE' : newAdTarget === 'STAKE_POOLS' ? 'STAKE_POOL_SPONSOR' : 'MINING_CLOUD',
       connectedTarget: newAdTarget,
-      dailyRevenueUsd: 3.20,
+      dailyRevenueUsd: newAdNetwork === 'GOOGLE_ADS' ? 4.80 : 3.20,
+      network: newAdNetwork,
+      campaignType: newAdCampaignType,
+      businessCategory: newAdBusinessCategory,
+      brandDomain: cleanedDomain || undefined,
+      destinationUrl: cleanedDomain ? `https://${cleanedDomain}` : undefined,
+      headlineOffer: newAdHeadlineOffer.trim() || newAdTitle,
     });
     showFeedback(res.success ? 'success' : 'error', res.message);
     if (res.success) {
       setNewAdTitle('');
       setNewAdAdvertiser('');
+      setNewAdBrandDomain('');
+      setNewAdHeadlineOffer('');
     }
+  };
+
+  const handleSaveGoogleTag = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = updateGoogleAdsConfig({
+      googleTagId: tagIdInput,
+      conversionLabel: convLabelInput,
+      dailyBudgetUsd: parseFloat(budgetInput) || 25,
+    });
+    showFeedback(res.success ? 'success' : 'error', res.message);
   };
 
   const handleHarvestAll = () => {
@@ -211,7 +293,19 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
               className="px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-black text-xs transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Create TS NFT</span>
+              <span>Create TS MEM NFT</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const res = linkAllNftsToRwaAndTsBnb();
+                showFeedback(res.success ? 'success' : 'error', res.message);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-black text-xs transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Link2 className="w-4 h-4" />
+              <span>Link NFTs ↔ RWA ($1 TS BNB)</span>
             </button>
 
             {onGoToStakePools && (
@@ -222,6 +316,17 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
               >
                 <Landmark className="w-4 h-4" />
                 <span>Connect Stake Pools</span>
+              </button>
+            )}
+
+            {onGoToGov && (
+              <button
+                type="button"
+                onClick={onGoToGov}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Submit CIP-95 to Gov</span>
               </button>
             )}
 
@@ -367,7 +472,7 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            Connect Ads ({adSlots.length})
+            Business Pop-Up Ads ({adSlots.length})
           </button>
           <button
             type="button"
@@ -548,48 +653,131 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
             </button>
           </div>
 
-          {/* Interactive Create TS NFT Studio */}
+          {/* Interactive Create TS MEM & Sovereign NFT Studio */}
           {showCreateNft && (
             <form
               onSubmit={handleCreateTsNft}
               className="rounded-2xl bg-zinc-900 border border-amber-500/40 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"
             >
-              {/* Artwork Preview */}
+              {/* Artwork / Compact 16:9 Video Token Preview (No Fullscreen) */}
               <div className="lg:col-span-4 flex flex-col justify-between gap-3">
-                <div className="relative aspect-square w-full max-w-[280px] mx-auto rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden">
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 p-4 text-center">
-                    <ImageIcon className="w-8 h-8 mb-2" />
-                    <span className="text-xs font-medium">TS Sovereign Gold Coin</span>
-                  </div>
-                  <img
-                    src={CONTRACTS.TS_SOVEREIGN_NFT_IMAGE}
-                    alt="TS Sovereign De-Coin Gold NFT Medallion"
-                    referrerPolicy="no-referrer"
-                    className="relative z-10 w-full h-full object-cover object-center"
-                  />
-                  <div className="absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
-                  <div className="absolute bottom-3 left-3.5 right-3.5 z-20 flex items-center justify-between text-xs font-mono text-white">
-                    <span className="font-bold truncate">{newNftName || 'TS Sovereign NFT'}</span>
-                    <span className="text-amber-300 font-semibold shrink-0">{newNftRarity}</span>
-                  </div>
+                <div className="rounded-2xl bg-zinc-950 border border-zinc-800 p-4 flex flex-col items-center justify-center gap-2.5 min-h-[190px]">
+                  {nftMediaPreset === 'TS_MEM_VIDEO' || nftMediaPreset === 'SOVEREIGN_VIDEO' ? (
+                    <>
+                      <div
+                        className="relative aspect-video w-full max-w-[196px] mx-auto rounded-lg bg-black border border-amber-500/40 overflow-hidden cursor-pointer"
+                        onClick={() => setIsVideoNftPlaying(!isVideoNftPlaying)}
+                        title="Compact 16:9 NFT Token Video (No Fullscreen)"
+                      >
+                        <video
+                          src={
+                            nftMediaPreset === 'TS_MEM_VIDEO'
+                              ? CONTRACTS.TS_MEM_VIDEO_NFT
+                              : CONTRACTS.TS_SOVEREIGN_VIDEO_NFT
+                          }
+                          poster={
+                            nftMediaPreset === 'TS_MEM_VIDEO'
+                              ? CONTRACTS.TS_MEM_GOLD_BNB_IMAGE
+                              : CONTRACTS.TS_SOVEREIGN_NFT_IMAGE
+                          }
+                          autoPlay={isVideoNftPlaying}
+                          loop
+                          muted
+                          playsInline
+                          disablePictureInPicture
+                          controlsList="nodownload nofullscreen noremoteplayback"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="text-[11px] font-mono text-zinc-400 tabular-nums text-center">
+                        16:9 {nftMediaPreset === 'TS_MEM_VIDEO' ? 'TS MEM ZEE BNB' : 'Sovereign'} · RWA:{' '}
+                        <span className="text-emerald-400 font-bold">${(parseFloat(newNftRwaUsd) || 1.0).toFixed(2)} TS BNB</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="relative aspect-square w-full max-w-[180px] mx-auto rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden">
+                      <img
+                        src={
+                          nftMediaPreset === 'TS_MEM_GOLD'
+                            ? CONTRACTS.TS_MEM_GOLD_BNB_IMAGE
+                            : CONTRACTS.TS_SOVEREIGN_NFT_IMAGE
+                        }
+                        alt="TS MEM & Gold BNB NFT Medallion"
+                        referrerPolicy="no-referrer"
+                        className="relative z-10 w-full h-full object-cover object-center"
+                      />
+                    </div>
+                  )}
                 </div>
+
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setNftMediaPreset('TS_MEM_VIDEO')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
+                      nftMediaPreset === 'TS_MEM_VIDEO'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                    }`}
+                  >
+                    <Film className="w-3 h-3" />
+                    <span>TS MEM Video</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNftMediaPreset('TS_MEM_GOLD')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
+                      nftMediaPreset === 'TS_MEM_GOLD'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                    }`}
+                  >
+                    <ImageIcon className="w-3 h-3" />
+                    <span>ZB 10z Gold</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNftMediaPreset('SOVEREIGN_VIDEO')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
+                      nftMediaPreset === 'SOVEREIGN_VIDEO'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                    }`}
+                  >
+                    <Film className="w-3 h-3" />
+                    <span>Sovereign 16:9</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNftMediaPreset('SOVEREIGN_GOLD')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center justify-center gap-1 cursor-pointer border whitespace-nowrap ${
+                      nftMediaPreset === 'SOVEREIGN_GOLD'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                    }`}
+                  >
+                    <ImageIcon className="w-3 h-3" />
+                    <span>Sovereign Coin</span>
+                  </button>
+                </div>
+
                 <div className="text-[11px] font-mono text-zinc-400 text-center">
-                  Contract: {shortenAddress(CONTRACTS.TS_NFT_CONTRACT)} · BEP-721
+                  Contract: {shortenAddress(CONTRACTS.TS_NFT_CONTRACT)} · RWA $1.00 TS BNB
                 </div>
               </div>
 
               {/* Form Fields & Stake Pool Connections */}
               <div className="lg:col-span-8 flex flex-col justify-between gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div>
                     <label className="block text-zinc-400 font-semibold mb-1.5">
-                      TS NFT Name
+                      TS MEM / NFT Name
                     </label>
                     <input
                       type="text"
                       value={newNftName}
                       onChange={(e) => setNewNftName(e.target.value)}
-                      placeholder="e.g. TS Sovereign De-Coin #002"
+                      placeholder="e.g. TS MEM · ZEE BNB Gold NFT"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-amber-500"
                       required
                     />
@@ -597,14 +785,29 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
 
                   <div>
                     <label className="block text-zinc-400 font-semibold mb-1.5">
-                      Edition / Collection Inscription
+                      Collection / Inscription
                     </label>
                     <input
                       type="text"
                       value={newNftCollection}
                       onChange={(e) => setNewNftCollection(e.target.value)}
-                      placeholder="E.I.M. Tsibaw Dawid Malkhut · Federal De-Coins"
+                      placeholder="TS MEM NFT · Isiphahla Royal Dynasty"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 font-semibold mb-1.5">
+                      RWA Value (USD · TS BNB)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={newNftRwaUsd}
+                      onChange={(e) => setNewNftRwaUsd(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-emerald-400 font-mono font-bold tabular-nums focus:outline-none focus:border-emerald-500"
+                      required
                     />
                   </div>
                 </div>
@@ -708,6 +911,8 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
               {filteredNfts.map((nft) => {
                 const dailyBnb = nft.dailyFeedUsd / WITHDRAWAL_RULES.BNB_PRICE_USD;
                 const connectedPoolIds = nft.connectedPoolIds || [];
+                const linkedNftIds = nft.linkedNftIds || [];
+                const rwaValUsd = nft.rwaValueUsd ?? 1.00;
                 const isPoolsExpanded = expandedNftPoolsId === nft.id;
 
                 return (
@@ -720,28 +925,56 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                     }`}
                   >
                     <div>
-                      {/* NFT Artwork Frame with Zero-Broken-Image Fallback */}
-                      <div className="relative aspect-square w-full bg-zinc-950 overflow-hidden border-b border-zinc-800">
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 p-4 text-center">
-                          <ImageIcon className="w-8 h-8 mb-2" />
-                          <span className="text-xs font-medium">{nft.name}</span>
+                      {/* NFT Media Frame (Compact 16:9 Small Screen for Video NFT or Image Medallion — No Fullscreen) */}
+                      {nft.videoUrl ? (
+                        <div className="p-4 pb-3 bg-zinc-950 border-b border-zinc-800 space-y-2.5">
+                          <div className="aspect-video w-full max-w-[196px] mx-auto rounded-lg bg-black border border-amber-500/45 overflow-hidden">
+                            <video
+                              src={nft.videoUrl}
+                              poster={nft.image}
+                              autoPlay={isVideoNftPlaying}
+                              loop
+                              muted
+                              playsInline
+                              disablePictureInPicture
+                              controlsList="nodownload nofullscreen noremoteplayback"
+                              className="w-full h-full object-contain bg-black"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-zinc-300">
+                            <span className="font-bold text-amber-300">{nft.tokenId} · 16:9</span>
+                            <span className="text-emerald-400 font-semibold">
+                              RWA ${rwaValUsd.toFixed(2)} TS BNB
+                            </span>
+                          </div>
                         </div>
-                        <img
-                          src={nft.image}
-                          alt={`${nft.name} ${nft.tokenId}`}
-                          referrerPolicy="no-referrer"
-                          className="relative z-10 w-full h-full object-cover object-center"
-                        />
-                        <div className="absolute inset-x-0 bottom-0 z-20 h-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
-                        <div className="absolute bottom-3 left-3.5 right-3.5 z-20 flex items-center justify-between text-xs font-mono text-white">
-                          <span className="font-bold">{nft.tokenId}</span>
-                          <span className="text-amber-300 font-semibold">+{nft.miningProfitMultiplier}x Yield</span>
+                      ) : (
+                        <div className="relative aspect-square w-full bg-zinc-950 overflow-hidden border-b border-zinc-800">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 p-4 text-center">
+                            <ImageIcon className="w-8 h-8 mb-2" />
+                            <span className="text-xs font-medium">{nft.name}</span>
+                          </div>
+                          <img
+                            src={nft.image}
+                            alt={`${nft.name} ${nft.tokenId}`}
+                            referrerPolicy="no-referrer"
+                            className="relative z-10 w-full h-full object-cover object-center"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 z-20 h-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
+                          <div className="absolute bottom-3 left-3.5 right-3.5 z-20 flex items-center justify-between text-xs font-mono text-white">
+                            <span className="font-bold">{nft.tokenId}</span>
+                            <span className="text-emerald-300 font-semibold">
+                              RWA ${rwaValUsd.toFixed(2)} TS BNB
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <div className="p-4 space-y-2.5">
                         <div className="text-xs font-mono text-zinc-400 flex items-center justify-between gap-2">
-                          <span className="truncate">{nft.collection} · {nft.rarity}</span>
+                          <span className="truncate">
+                            {nft.collection} · {nft.rarity}
+                          </span>
                         </div>
 
                         <h3 className="text-base font-bold text-white leading-snug">{nft.name}</h3>
@@ -751,59 +984,103 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
 
                         <div className="pt-2.5 border-t border-zinc-800 grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
                           <div>
-                            <span className="text-zinc-500 block">Daily Feed</span>
-                            <span className="text-emerald-400 font-bold">+{formatUSD(nft.dailyFeedUsd)}</span>
+                            <span className="text-zinc-500 block">RWA Value (TS BNB)</span>
+                            <span className="text-emerald-400 font-bold">
+                              {formatUSD(rwaValUsd)} TS BNB
+                            </span>
                             <span className="text-zinc-500 text-[11px] block">
-                              +{dailyBnb.toFixed(4)} BNB
+                              Feed: +{formatUSD(nft.dailyFeedUsd)}/d ({dailyBnb.toFixed(4)} BNB)
                             </span>
                           </div>
                           <div>
-                            <span className="text-zinc-500 block">Stake Pool Boost</span>
-                            <span className="text-amber-400 font-bold">+{(nft.stakePoolApyBoostPct ?? 4.0).toFixed(1)}% APY</span>
+                            <span className="text-zinc-500 block">NFT & RWA Links</span>
+                            <span className="text-amber-400 font-bold">
+                              +{(nft.stakePoolApyBoostPct ?? 4.0).toFixed(1)}% APY
+                            </span>
                             <span className="text-zinc-400 text-[11px] block">
-                              {connectedPoolIds.length} / {stakePools.length} pools linked
+                              {linkedNftIds.length} NFTs · {connectedPoolIds.length} RWA pools
                             </span>
                           </div>
                         </div>
 
-                        {/* Stake Pool Connector Drawer inside Card */}
+                        {/* Cross-NFT & RWA Stake Pool Connector Drawer inside Card */}
                         {nft.owned && isPoolsExpanded && (
-                          <div className="pt-2 border-t border-zinc-800 space-y-1.5 text-[11px]">
-                            <div className="flex items-center justify-between text-zinc-400 font-semibold">
-                              <span>Link Stake Pools:</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const res = connectNftToAllStakePools(nft.id);
-                                  showFeedback(res.success ? 'success' : 'error', res.message);
-                                }}
-                                className="text-amber-400 hover:underline cursor-pointer"
-                              >
-                                Connect All
-                              </button>
+                          <div className="pt-2.5 border-t border-zinc-800 space-y-3 text-[11px]">
+                            {/* Link RWA Stake Pools */}
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-zinc-400 font-semibold">
+                                <span>Link RWA Stake Pools:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const res = connectNftToAllStakePools(nft.id);
+                                    showFeedback(res.success ? 'success' : 'error', res.message);
+                                  }}
+                                  className="text-amber-400 hover:underline cursor-pointer"
+                                >
+                                  Connect All
+                                </button>
+                              </div>
+                              <div className="space-y-1 max-h-28 overflow-y-auto">
+                                {stakePools.map((sp) => {
+                                  const linked = connectedPoolIds.includes(sp.id);
+                                  return (
+                                    <button
+                                      key={sp.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const res = toggleNftStakePoolConnection(nft.id, sp.id);
+                                        showFeedback(res.success ? 'success' : 'error', res.message);
+                                      }}
+                                      className={`w-full px-2.5 py-1.5 rounded-lg border text-left flex items-center justify-between transition-colors cursor-pointer ${
+                                        linked
+                                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                                          : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+                                      }`}
+                                    >
+                                      <span className="truncate">{sp.name}</span>
+                                      <span className="font-mono shrink-0 ml-2">{linked ? 'Linked' : 'Connect'}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div className="space-y-1 max-h-36 overflow-y-auto">
-                              {stakePools.map((sp) => {
-                                const linked = connectedPoolIds.includes(sp.id);
-                                return (
-                                  <button
-                                    key={sp.id}
-                                    type="button"
-                                    onClick={() => {
-                                      const res = toggleNftStakePoolConnection(nft.id, sp.id);
-                                      showFeedback(res.success ? 'success' : 'error', res.message);
-                                    }}
-                                    className={`w-full px-2.5 py-1.5 rounded-lg border text-left flex items-center justify-between transition-colors cursor-pointer ${
-                                      linked
-                                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
-                                    }`}
-                                  >
-                                    <span className="truncate">{sp.name}</span>
-                                    <span className="font-mono shrink-0 ml-2">{linked ? 'Linked' : 'Connect'}</span>
-                                  </button>
-                                );
-                              })}
+
+                            {/* Link Cross-NFTs ($1 TS BNB Parity Mesh) */}
+                            <div className="space-y-1.5 pt-2 border-t border-zinc-800/80">
+                              <div className="flex items-center justify-between text-zinc-400 font-semibold">
+                                <span>Link Other NFTs ($1 TS BNB):</span>
+                                <span className="text-emerald-400 font-mono">{linkedNftIds.length} linked</span>
+                              </div>
+                              <div className="space-y-1 max-h-28 overflow-y-auto">
+                                {miningNfts
+                                  .filter((other) => other.id !== nft.id)
+                                  .map((other) => {
+                                    const isLinkedToOther = linkedNftIds.includes(other.id);
+                                    return (
+                                      <button
+                                        key={`${nft.id}-${other.id}`}
+                                        type="button"
+                                        onClick={() => {
+                                          const res = toggleNftToNftLink(nft.id, other.id);
+                                          showFeedback(res.success ? 'success' : 'error', res.message);
+                                        }}
+                                        className={`w-full px-2.5 py-1.5 rounded-lg border text-left flex items-center justify-between transition-colors cursor-pointer ${
+                                          isLinkedToOther
+                                            ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+                                        }`}
+                                      >
+                                        <span className="truncate">
+                                          {other.tokenId} · {other.name}
+                                        </span>
+                                        <span className="font-mono shrink-0 ml-2">
+                                          {isLinkedToOther ? 'Linked' : '+Link'}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                              </div>
                             </div>
                           </div>
                         )}
@@ -825,6 +1102,22 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                         </button>
                       ) : (
                         <>
+                          {nft.videoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const res = collectVideoAndNftPoolMoney();
+                                showFeedback(res.success ? 'success' : 'error', res.message);
+                              }}
+                              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:brightness-110 text-zinc-950 font-black text-xs transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"
+                            >
+                              <Coins className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>
+                                Collect Play + Pool ({formatUSD(collectableVideoAndPoolUsd)})
+                              </span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={() =>
@@ -835,8 +1128,8 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                             <Link2 className="w-3.5 h-3.5" />
                             <span>
                               {isPoolsExpanded
-                                ? 'Done Connecting Pools'
-                                : `Connect Stake Pools (${connectedPoolIds.length})`}
+                                ? 'Done Linking NFTs & RWA'
+                                : `Link NFTs (${linkedNftIds.length}) & RWA (${connectedPoolIds.length})`}
                             </span>
                           </button>
 
@@ -875,30 +1168,192 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
         </section>
       )}
 
-      {/* Connect Ads Network Section */}
-      {filteredAds.length > 0 && (
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Google Ads Integration & Appearing Business Pop-Up Ads Section */}
+      {(filterTab === 'ALL' || filterTab === 'ADS') && (
+        <section className="space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-400" />
-                <span>Connect Ads · Partner Sponsorship Placements</span>
+                <span>Appearing Business Google Ads (Truworths · Jet · Game · Pop-Ups)</span>
               </h2>
               <p className="text-xs text-zinc-400">
-                Connect Web3 ad placements to TS NFTs, Stake Pools, and Mining Profits to earn continuous daily ad-share yield.
+                Only appearing retail business pop-up Google Ads (Truworths, Jet, Game, Woolworths, Takealot, Pick n Pay, Makro) streaming yield into Stake Pools, TS NFTs & Mining Profits.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const res = connectAllAds();
-                showFeedback(res.success ? 'success' : 'error', res.message);
-              }}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Connect All Ads (+{formatUSD(adSlots.reduce((s, a) => s + a.dailyRevenueUsd, 0))}/day)
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={togglePopupAdEnabled}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
+                  popupAdEnabled
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                Auto Pop-Up Ads: {popupAdEnabled ? 'ON' : 'OFF'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openPopupBusinessAd()}
+                className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Show Pop-Up Business Ad
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const res = connectAllAds();
+                  showFeedback(res.success ? 'success' : 'error', res.message);
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Connect All Ads (+{formatUSD(adSlots.reduce((s, a) => s + a.dailyRevenueUsd, 0))}/day)
+              </button>
+            </div>
+          </div>
+
+          {/* Business Category Filter Strip */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-zinc-900 border border-zinc-800 overflow-x-auto w-fit max-w-full">
+            {(
+              [
+                { id: 'ALL', label: `All Business Ads (${adSlots.length})` },
+                { id: 'FASHION_RETAIL', label: 'Fashion (Truworths, Jet, PEP, Ackermans, MRP, Woolworths)' },
+                { id: 'SUPERSTORE_TECH', label: 'Superstores & DIY (Game, Takealot, Makro, Builders)' },
+                { id: 'GROCERY_FOOD', label: 'Grocery & Health (Pick n Pay, Checkers, Shoprite, Clicks)' },
+                { id: 'FINANCE_TELECOM', label: 'Gov & Telecom (Vodacom Business, MTN)' },
+              ] as const
+            ).map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setBusinessCategoryFilter(cat.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  businessCategoryFilter === cat.id
+                    ? 'bg-amber-500 text-zinc-950'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Google Ads Verified Advertiser & gtag.js Conversion Console */}
+          <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 sm:p-6 space-y-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Google Ads Advertiser Verified</span>
+                  </span>
+                  <span className="text-zinc-600">·</span>
+                  <span className="text-zinc-300">{googleAdsConfig.jurisdiction}</span>
+                  <span className="text-zinc-600">·</span>
+                  <span className={googleAdsConfig.campaignStatus === 'ACTIVE' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                    {googleAdsConfig.campaignStatus === 'ACTIVE' ? 'gtag.js Active' : 'Paused'}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  {googleAdsConfig.advertiserName}
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  {googleAdsConfig.entityType} — {googleAdsConfig.verifiedChecks.join(' · ')}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const res = toggleGoogleAdsStatus();
+                    showFeedback(res.success ? 'success' : 'error', res.message);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    googleAdsConfig.campaignStatus === 'ACTIVE'
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500 text-zinc-950 font-black'
+                  }`}
+                >
+                  {googleAdsConfig.campaignStatus === 'ACTIVE' ? 'Google Ads: Active' : 'Activate Google Ads'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const res = triggerGoogleAdsConversion('Stake Pools & TS NFT Attribution', 16.0);
+                    showFeedback(res.success ? 'success' : 'error', res.message);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-bold text-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  Fire gtag Conversion
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveGoogleTag} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs items-end">
+              <div>
+                <label className="block text-zinc-400 font-semibold mb-1">
+                  Google Ads Tag ID (gtag.js)
+                </label>
+                <input
+                  type="text"
+                  value={tagIdInput}
+                  onChange={(e) => setTagIdInput(e.target.value)}
+                  placeholder="AW-1684920315"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-semibold mb-1">
+                  Conversion Event Label
+                </label>
+                <input
+                  type="text"
+                  value={convLabelInput}
+                  onChange={(e) => setConvLabelInput(e.target.value)}
+                  placeholder="ts_protocol_yield"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-semibold mb-1">
+                  Daily Ad Budget (USD)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono tabular-nums focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs transition-colors whitespace-nowrap cursor-pointer"
+              >
+                Save Google Ads Tag
+              </button>
+            </form>
+
+            {googleAdsConversions.length > 0 && (
+              <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-zinc-400">
+                <span>
+                  Latest gtag Conversion: <span className="text-white font-semibold">{googleAdsConversions[0].sendTo}</span> · {googleAdsConversions[0].source}
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  +${googleAdsConversions[0].valueUsd.toFixed(2)} {googleAdsConversions[0].currency} · {googleAdsConversions.length} events tracked
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -913,13 +1368,22 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
               >
                 <div className="space-y-2.5">
                   <div className="text-xs font-mono text-zinc-400 flex items-center justify-between gap-2">
-                    <span>{ad.advertiser} · {ad.placement.replace('_', ' ')}</span>
-                    <span className={ad.connected ? 'text-emerald-400 font-bold' : 'text-zinc-500'}>
-                      {ad.connected ? 'Connected' : 'Ready to Connect'}
+                    <span className="truncate">
+                      Google Business Pop-Up · {ad.brandDomain || 'business.google.com'}
+                    </span>
+                    <span className={ad.connected ? 'text-emerald-400 font-bold shrink-0' : 'text-zinc-500 shrink-0'}>
+                      {ad.connected ? 'Appearing · Connected' : 'Ready to Appear'}
                     </span>
                   </div>
 
-                  <h3 className="text-base font-bold text-white">{ad.title}</h3>
+                  <div>
+                    <h3 className="text-base font-bold text-white">{ad.title}</h3>
+                    {ad.headlineOffer && (
+                      <div className="text-xs font-semibold text-amber-300 mt-0.5">
+                        {ad.headlineOffer}
+                      </div>
+                    )}
+                  </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">{ad.description}</p>
 
                   <div className="pt-3 border-t border-zinc-800 grid grid-cols-3 gap-2 text-xs font-mono tabular-nums">
@@ -928,7 +1392,7 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                       <span className="text-emerald-400 font-bold">+{formatUSD(ad.dailyRevenueUsd)}/day</span>
                     </div>
                     <div>
-                      <span className="text-zinc-500 block">24h Impressions</span>
+                      <span className="text-zinc-500 block">24h Pop-Ups</span>
                       <span className="text-white font-bold">{ad.impressions24h.toLocaleString()}</span>
                     </div>
                     <div>
@@ -938,53 +1402,92 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-zinc-800 flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-mono text-zinc-500 tabular-nums">
-                    Addr: {shortenAddress(ad.targetAddress)} · Earned {formatUSD(ad.totalEarnedUsd)}
+                <div className="pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono text-zinc-500 tabular-nums truncate">
+                    {ad.advertiser} · Earned {formatUSD(ad.totalEarnedUsd)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const res = toggleAdConnection(ad.id);
-                      showFeedback(res.success ? 'success' : 'error', res.message);
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      ad.connected
-                        ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black'
-                    }`}
-                  >
-                    {ad.connected ? 'Connected · Pause Ad' : 'Connect Ad'}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openPopupBusinessAd(ad.id)}
+                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      Pop Up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const res = toggleAdConnection(ad.id);
+                        showFeedback(res.success ? 'success' : 'error', res.message);
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                        ad.connected
+                          ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black'
+                      }`}
+                    >
+                      {ad.connected ? 'Connected · Pause Ad' : 'Connect Ad'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Quick Add Custom Ad Placement */}
+          {/* Quick Add Appearing Business Google Ad */}
           <form
             onSubmit={handleAddCustomAd}
-            className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 flex flex-col md:flex-row md:items-center gap-3 text-xs"
+            className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 text-xs items-center"
           >
-            <input
-              type="text"
-              value={newAdTitle}
-              onChange={(e) => setNewAdTitle(e.target.value)}
-              placeholder="New Ad Campaign Title (e.g. TS Gold Coin Banner)"
-              className="flex-1 px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-              required
-            />
             <input
               type="text"
               value={newAdAdvertiser}
               onChange={(e) => setNewAdAdvertiser(e.target.value)}
-              placeholder="Partner / Advertiser Name"
-              className="w-full md:w-52 px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+              placeholder="Business Name (e.g. Pep Stores, Ackermans, Builders)"
+              className="md:col-span-4 px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+              required
             />
+            <input
+              type="text"
+              value={newAdBrandDomain}
+              onChange={(e) => setNewAdBrandDomain(e.target.value)}
+              placeholder="Business Domain (e.g. pepstores.com)"
+              className="md:col-span-4 px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+            />
+            <input
+              type="text"
+              value={newAdTitle}
+              onChange={(e) => setNewAdTitle(e.target.value)}
+              placeholder="Pop-Up Ad Headline / Offer"
+              className="md:col-span-4 px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+              required
+            />
+            <select
+              value={newAdBusinessCategory}
+              onChange={(e) =>
+                setNewAdBusinessCategory(
+                  e.target.value as NonNullable<AdCampaignSlot['businessCategory']>
+                )
+              }
+              className="md:col-span-3 px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500"
+            >
+              <option value="FASHION_RETAIL">Fashion & Retail</option>
+              <option value="SUPERSTORE_TECH">Superstore & Tech</option>
+              <option value="GROCERY_FOOD">Grocery & Retail</option>
+              <option value="FINANCE_TELECOM">Finance & Telecom</option>
+            </select>
+            <select
+              value={newAdNetwork}
+              onChange={(e) => setNewAdNetwork(e.target.value as AdCampaignSlot['network'])}
+              className="md:col-span-3 px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500"
+            >
+              <option value="GOOGLE_ADS">Google Business Ads</option>
+              <option value="WEB3_PARTNER">Retail Partner</option>
+            </select>
             <select
               value={newAdTarget}
               onChange={(e) => setNewAdTarget(e.target.value as AdCampaignSlot['connectedTarget'])}
-              className="px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500"
+              className="md:col-span-3 px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500"
             >
               <option value="STAKE_POOLS">Route to Stake Pools</option>
               <option value="TS_NFT">Route to TS NFT</option>
@@ -992,9 +1495,9 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
             </select>
             <button
               type="submit"
-              className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-bold whitespace-nowrap shrink-0 cursor-pointer"
+              className="md:col-span-3 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black whitespace-nowrap cursor-pointer"
             >
-              + Connect Custom Ad
+              + Add Business Pop-Up Ad
             </button>
           </form>
         </section>

@@ -27,7 +27,8 @@ import {
   Radio,
   Gift,
   Banknote,
-  Landmark
+  Landmark,
+  Mail
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
 import { CONTRACTS, shortenAddress } from '../data/constants';
@@ -59,7 +60,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     claimFaucet, 
     alerts, 
     currentUser, 
-    logoutUser 
+    logoutUser,
+    gmailAuthorized,
+    gmailAccountEmail
   } = useProtocol();
 
   const [copied, setCopied] = useState(false);
@@ -89,6 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'stakepools', label: 'Stake Pools', icon: Landmark, badge: 'RWA' },
     { id: 'referrals', label: 'Referral Center', icon: Share2, badge: '4-Tier' },
     { id: 'paycheck', label: 'Paycheck', icon: Banknote },
+    { id: 'gov', label: 'CIP-95 Gov', icon: ShieldCheck, badge: 'GOV' },
     { id: 'calculator', label: 'Yield & IL Math', icon: Calculator },
     { id: 'statements', label: 'Financial Statements', icon: FileText },
   ];
@@ -123,7 +127,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center space-x-1">
+          <nav className="hidden lg:flex items-center space-x-1 overflow-x-auto no-scrollbar mx-3">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -182,6 +186,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Download className="w-4 h-4" />
               <span className="hidden md:inline">Download App</span>
+            </button>
+
+            {/* Gmail Email Authorization Sync Button */}
+            <button
+              type="button"
+              onClick={onOpenAlertsModal}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                gmailAuthorized
+                  ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40'
+              }`}
+              title={
+                gmailAuthorized
+                  ? `Gmail Withdrawal Auth Synced (${gmailAccountEmail || CONTRACTS.ALERT_EMAIL})`
+                  : `Sync Gmail Withdrawal Authorization (${CONTRACTS.ALERT_EMAIL})`
+              }
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">{gmailAuthorized ? 'Gmail Synced' : 'Sync Email'}</span>
             </button>
 
             {/* Crypto Alerts Bell Button */}

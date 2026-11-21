@@ -640,7 +640,7 @@ export const PaycheckNavigatorView: React.FC<PaycheckNavigatorViewProps> = ({
               <div>
                 <div className="font-bold text-white">TS Mining Machines Fleet ({connectedMachines.length} Rigs)</div>
                 <div className="text-zinc-400 font-mono tabular-nums mt-0.5">
-                  +{formatUSD(machinesDailyUsd)}/day · {totalMinesFedToIrdBnb.toFixed(4)} BNB fed to IRD
+                  +{formatUSD(machinesDailyUsd)}/day · Unified TS BOT & IRD: {totalMinesFedToIrdBnb.toFixed(4)} BNB
                 </div>
               </div>
               {onWithdrawToAddress && (

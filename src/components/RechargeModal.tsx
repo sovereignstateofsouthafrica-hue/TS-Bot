@@ -20,7 +20,7 @@ interface RechargeModalProps {
 }
 
 export const RechargeModal: React.FC<RechargeModalProps> = ({ isOpen, onClose }) => {
-  const { processRechargeBnb, wallet } = useProtocol();
+  const { processRechargeBnb, wallet, refreshTokenBalances } = useProtocol();
 
   const [bnbAmount, setBnbAmount] = useState<string>('0.0163'); // Package 1: $10 Mining Package
   const [selectedUsdPackage, setSelectedUsdPackage] = useState<number>(10);
@@ -68,6 +68,9 @@ export const RechargeModal: React.FC<RechargeModalProps> = ({ isOpen, onClose })
         txHashInput.trim() || undefined,
         `BNB Recharge Package ($${(amount * bnbPrice).toFixed(2)}) Credited & Dispatched`
       );
+      if (res.success) {
+        refreshTokenBalances('RECHARGE');
+      }
       setReceipt(res.alert);
       setIsSubmitting(false);
     }, 600);

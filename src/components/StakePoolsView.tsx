@@ -37,9 +37,12 @@ export const StakePoolsView: React.FC<StakePoolsViewProps> = ({
     miningNfts,
     adSlots,
     toggleNftStakePoolConnection,
+    linkAllNftsToRwaAndTsBnb,
     connectStakePoolWithAllNfts,
     toggleAdConnection,
     connectAllAds,
+    googleAdsConfig,
+    openPopupBusinessAd,
     wallet,
     rechargeBalanceUsd,
     accumulatedMiningYieldBnb,
@@ -581,24 +584,37 @@ export const StakePoolsView: React.FC<StakePoolsViewProps> = ({
                 <span>TS NFT Connectors → {selectedPool.symbol}</span>
               </h2>
               <p className="text-xs text-zinc-400">
-                Link owned TS NFTs to {selectedPool.name} to compound +APY boosts automatically.
+                Link TS MEM & Sovereign NFTs ($1.00 TS BNB RWA Value) to {selectedPool.name} for +APY boosts.
               </p>
             </div>
-            {onGoToCreateNft && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={onGoToCreateNft}
-                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-bold text-xs whitespace-nowrap shrink-0 cursor-pointer"
+                onClick={() => {
+                  const res = linkAllNftsToRwaAndTsBnb();
+                  showFeedback(res.success ? 'success' : 'error', res.message);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-bold text-xs whitespace-nowrap cursor-pointer"
               >
-                + Create TS NFT
+                Link NFTs ↔ RWA ($1 TS BNB)
               </button>
-            )}
+              {onGoToCreateNft && (
+                <button
+                  type="button"
+                  onClick={onGoToCreateNft}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-bold text-xs whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  + Create TS MEM NFT
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-3">
             {ownedNfts.map((nft) => {
               const isLinked = (nft.connectedPoolIds || []).includes(selectedPool.id);
               const boostPct = nft.stakePoolApyBoostPct ?? 4.0;
+              const rwaUsd = nft.rwaValueUsd ?? 1.00;
               return (
                 <div
                   key={nft.id}
@@ -607,7 +623,7 @@ export const StakePoolsView: React.FC<StakePoolsViewProps> = ({
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-amber-500/30 shrink-0">
                       <img
-                        src={nft.image || CONTRACTS.TS_SOVEREIGN_NFT_IMAGE}
+                        src={nft.image || CONTRACTS.TS_MEM_GOLD_BNB_IMAGE}
                         alt={nft.name}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover"
@@ -618,7 +634,7 @@ export const StakePoolsView: React.FC<StakePoolsViewProps> = ({
                         {nft.name}
                       </div>
                       <div className="text-[11px] font-mono text-zinc-400 tabular-nums mt-0.5">
-                        {nft.tokenId} · +{boostPct.toFixed(1)}% APY · {(nft.connectedPoolIds || []).length} pools
+                        {nft.tokenId} · <span className="text-emerald-400 font-bold">${rwaUsd.toFixed(2)} RWA (TS BNB)</span> · +{boostPct.toFixed(1)}% APY · {(nft.linkedNftIds || []).length} NFTs
                       </div>
                     </div>
                   </div>
@@ -643,28 +659,37 @@ export const StakePoolsView: React.FC<StakePoolsViewProps> = ({
           </div>
         </div>
 
-        {/* Connect Ads Panel */}
+        {/* Connect Appearing Google Business Ads Panel */}
         <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-zinc-800">
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <Megaphone className="w-4 h-4 text-emerald-400" />
-                <span>Connect Ads · Partner Revenue Streams</span>
+                <span>Appearing Business Google Ads · Truworths, Jet, Game</span>
               </h2>
               <p className="text-xs text-zinc-400">
-                Activate Web3 ad placements to stream daily sponsorship yield into Stake Pools & Mining Profits.
+                Appearing retail business pop-up Google Ads ({googleAdsConfig.googleTagId}) streaming daily yield into Stake Pools & Mining Profits.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const res = connectAllAds();
-                showFeedback(res.success ? 'success' : 'error', res.message);
-              }}
-              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Connect All Ads
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => openPopupBusinessAd()}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs whitespace-nowrap cursor-pointer"
+              >
+                Pop Up Business Ad
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const res = connectAllAds();
+                  showFeedback(res.success ? 'success' : 'error', res.message);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs whitespace-nowrap cursor-pointer"
+              >
+                Connect All Ads
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -674,26 +699,37 @@ export const StakePoolsView: React.FC<StakePoolsViewProps> = ({
                 className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <div className="text-xs font-bold text-white truncate">{ad.title}</div>
-                  <div className="text-[11px] font-mono text-zinc-400 tabular-nums mt-0.5">
-                    {ad.advertiser} · <span className="text-emerald-400 font-bold">+{formatUSD(ad.dailyRevenueUsd)}/day</span> · {ad.impressions24h.toLocaleString()} views
+                  <div className="text-xs font-bold text-white truncate">
+                    {ad.advertiser} — {ad.headlineOffer || ad.title}
+                  </div>
+                  <div className="text-[11px] font-mono text-zinc-400 tabular-nums mt-0.5 truncate">
+                    {ad.brandDomain || 'business.google.com'} · <span className="text-emerald-400 font-bold">+{formatUSD(ad.dailyRevenueUsd)}/day</span> · {ad.impressions24h.toLocaleString()} pop-ups
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const res = toggleAdConnection(ad.id);
-                    showFeedback(res.success ? 'success' : 'error', res.message);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer transition-colors ${
-                    ad.connected
-                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black'
-                  }`}
-                >
-                  {ad.connected ? 'Ad Connected' : 'Connect Ad'}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openPopupBusinessAd(ad.id)}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs whitespace-nowrap cursor-pointer"
+                  >
+                    Pop Up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const res = toggleAdConnection(ad.id);
+                      showFeedback(res.success ? 'success' : 'error', res.message);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                      ad.connected
+                        ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black'
+                    }`}
+                  >
+                    {ad.connected ? 'Ad Connected' : 'Connect Ad'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

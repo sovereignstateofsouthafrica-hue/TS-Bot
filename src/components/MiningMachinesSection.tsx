@@ -336,14 +336,14 @@ export const MiningMachinesSection: React.FC<MiningMachinesSectionProps> = ({
                       </div>
                     </div>
 
-                    {/* IRD Blockchain Wallet Link Strip */}
+                    {/* Unified TS BOT & IRD Link Strip */}
                     <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 flex items-center justify-between text-[11px] font-mono">
                       <div className="flex items-center gap-1.5 text-amber-300">
                         <LinkIcon className="w-3 h-3 text-amber-400 shrink-0" />
-                        <span>IRD: {shortenAddress(machine.irdWalletAddress || irdWalletAddress)}</span>
+                        <span>Unified Node: {shortenAddress(machine.irdWalletAddress || irdWalletAddress)}</span>
                       </div>
                       <span className="text-emerald-400 font-bold shrink-0">
-                        +{(machine.irdFedMinesBnb ?? 0).toFixed(4)} BNB Fed
+                        +{(machine.totalMinedBnb ?? 0).toFixed(4)} BNB Synced
                       </span>
                     </div>
                   </div>
@@ -364,11 +364,11 @@ export const MiningMachinesSection: React.FC<MiningMachinesSectionProps> = ({
 
                     <button
                       onClick={() => feedMinesToIrd(machine.id)}
-                      className="py-1.5 px-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:brightness-110 text-zinc-950 font-bold text-xs flex items-center gap-1 shadow-sm transition-all"
-                      title="Feed this machine's mined blocks directly to IRD Blockchain Wallet"
+                      className="py-1.5 px-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:brightness-110 text-zinc-950 font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                      title="Credit rig yield into unified TS BOT & IRD Mining Balance"
                     >
                       <Zap className="w-3 h-3 stroke-[2.5]" />
-                      <span>Feed to IRD</span>
+                      <span>Credit Yield</span>
                     </button>
 
                     {isOnline ? (

@@ -106,6 +106,10 @@ export interface CryptoAlert {
   withdrawalChargeUsd?: number;
   withdrawalChargeBnb?: number;
   totalDebitedBnb?: number;
+  gmailDeliveryStatus?: 'SENT' | 'NEEDS_AUTH' | 'FAILED';
+  gmailMessageId?: string;
+  gmailSentFrom?: string;
+  gmailError?: string;
 }
 
 export interface ReferralUser {
@@ -257,6 +261,7 @@ export interface MiningNftAsset {
   collection: string;
   rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
   image: string;
+  videoUrl?: string;
   floorValueUsd: number;
   miningProfitMultiplier: number;
   dailyFeedUsd: number;
@@ -265,6 +270,9 @@ export interface MiningNftAsset {
   totalFedBnb: number;
   mintCostBnb: number;
   connectedPoolIds?: string[];
+  linkedNftIds?: string[];
+  rwaValueUsd?: number;
+  isMemeNft?: boolean;
   stakePoolApyBoostPct?: number;
   editionLabel?: string;
   description: string;
@@ -286,6 +294,13 @@ export interface AdCampaignSlot {
   id: string;
   title: string;
   advertiser: string;
+  network?: 'GOOGLE_ADS' | 'WEB3_PARTNER';
+  campaignType?: 'SEARCH' | 'DISPLAY' | 'PERFORMANCE_MAX' | 'NFT_SPONSOR';
+  businessCategory?: 'FASHION_RETAIL' | 'SUPERSTORE_TECH' | 'GROCERY_FOOD' | 'FINANCE_TELECOM';
+  brandDomain?: string;
+  destinationUrl?: string;
+  headlineOffer?: string;
+  adFormat?: 'POPUP_BUSINESS' | 'BANNER' | 'SEARCH' | 'DISPLAY';
   placement: 'NFT_SHOWCASE' | 'STAKE_POOL_SPONSOR' | 'MINING_CLOUD' | 'DASHBOARD_BANNER';
   connectedTarget: 'TS_NFT' | 'STAKE_POOLS' | 'MINING_PROFITS';
   dailyRevenueUsd: number;
@@ -295,6 +310,29 @@ export interface AdCampaignSlot {
   targetAddress: string;
   totalEarnedUsd: number;
   description: string;
+}
+
+export interface GoogleAdsConfig {
+  advertiserName: string;
+  entityType: string;
+  jurisdiction: string;
+  kycVerified: boolean;
+  verifiedChecks: string[];
+  googleTagId: string;
+  conversionLabel: string;
+  campaignStatus: 'ACTIVE' | 'PAUSED' | 'READY';
+  dailyBudgetUsd: number;
+}
+
+export interface GoogleAdsConversionEvent {
+  id: string;
+  timestamp: number;
+  eventName: string;
+  sendTo: string;
+  valueUsd: number;
+  currency: string;
+  source: string;
+  dispatchedToGtag: boolean;
 }
 
 export type StakePoolCategory =
@@ -338,3 +376,46 @@ export interface StakePoolEvent {
   blockNumber: number;
 }
 
+export interface Cip95DRepState {
+  connected: boolean;
+  walletName: string;
+  networkId: number;
+  drepId: string;
+  drepKeyHash: string;
+  registeredPubStakeKey: string;
+  delegatedPool: string;
+  votingPowerAda: number;
+  cipStandards: string[];
+  lastSyncedAt: number;
+}
+
+export interface GovernmentSubmission {
+  id: string;
+  submittedAt: number;
+  referenceCode: string;
+  projectTitle: string;
+  entityName: string;
+  cipStandard: string;
+  targetAgency: string;
+  drepId: string;
+  liveAppUrl: string;
+  assetSummary: string;
+  adNetworkSummary: string;
+  anchorHash: string;
+  submissionTrack: 'GOVERNMENT_VOTING' | 'TREASURY_ALLOCATION' | 'DUAL_GOV_AND_TREASURY';
+  treasuryAmountUsd?: number;
+  treasuryAmountAda?: number;
+  treasuryDestination?: string;
+  voteYesCount?: number;
+  voteNoCount?: number;
+  voteAbstainCount?: number;
+  votePowerYesAda?: number;
+  userVote?: 'YES' | 'NO' | 'ABSTAIN';
+  votingOpenOnline?: boolean;
+  status:
+    | 'SUBMITTED_TO_GOV'
+    | 'VOTING_ONLINE'
+    | 'SUBMITTED_TO_TREASURY'
+    | 'LAUNCH_READY'
+    | 'VERIFIED_ANCHOR';
+}
