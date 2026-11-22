@@ -108,6 +108,15 @@ export interface WithdrawalEmailResult {
   error?: string;
 }
 
+export const isValidEmailAddress = (email: string): boolean => {
+  const cleaned = email.trim();
+  return /^[^\s@<>()[\]\\,;:\s@"]+@[^\s@<>()[\]\\,;:\s@"]+\.[^\s@<>()[\]\\,;:\s@"]{2,}$/.test(
+    cleaned
+  );
+};
+
+const sanitizeHeaderValue = (val: string): string => val.replace(/[\r\n]+/g, ' ').trim();
+
 export const sendWithdrawalAuthorizationEmail = async (
   payload: WithdrawalEmailPayload
 ): Promise<WithdrawalEmailResult> => {
@@ -116,12 +125,19 @@ export const sendWithdrawalAuthorizationEmail = async (
     return {
       delivered: false,
       needsAuth: true,
-      error: 'Connect your Google account (sovereignstateofsouthafrica@gmail.com) to authorize live Gmail delivery.',
+      error: `Connect your Google account (${CONTRACTS.ALERT_EMAIL}) to authorize live Gmail delivery.`,
     };
   }
 
-  const toEmail = payload.recipientEmail || CONTRACTS.ALERT_EMAIL;
-  const fromEmail = cachedUserEmail || toEmail;
+  const rawToEmail = sanitizeHeaderValue(payload.recipientEmail || CONTRACTS.ALERT_EMAIL);
+  if (!isValidEmailAddress(rawToEmail)) {
+    return {
+      delivered: false,
+      error: `Invalid withdrawal email address: "${rawToEmail}". Please enter a valid email address (e.g. ${CONTRACTS.ALERT_EMAIL}).`,
+    };
+  }
+
+  const fromEmail = cachedUserEmail ? sanitizeHeaderValue(cachedUserEmail) : '';
   const chargeUsd = payload.withdrawalChargeUsd ?? 1.0;
   const totalBnb = payload.totalDebitedBnb ?? payload.amountBnb;
   const timestampIso = new Date().toISOString();
@@ -132,12 +148,12 @@ export const sendWithdrawalAuthorizationEmail = async (
 
   const bodyLines = [
     payload.isTestSync
-      ? 'TS PROTOCOL — GMAIL WITHDRAWAL AUTHORIZATION SYNC CONFIRMED'
-      : 'TS PROTOCOL — OFFICIAL BNB WITHDRAWAL AUTHORIZATION REQUEST',
+      ? 'TS PROTOCOL - GMAIL WITHDRAWAL AUTHORIZATION SYNC CONFIRMED'
+      : 'TS PROTOCOL - OFFICIAL BNB WITHDRAWAL AUTHORIZATION REQUEST',
     '====================================================================',
     '',
-    `Authorized Recipient Email : ${toEmail}`,
-    `Dispatched From Account    : ${fromEmail}`,
+    `Authorized Recipient Email : ${rawToEmail}`,
+    `Dispatched From Account    : ${fromEmail || rawToEmail}`,
     `Timestamp (UTC)            : ${timestampIso}`,
     `Network                    : BNB Smart Chain (BEP-20)`,
     '',
@@ -155,16 +171,16 @@ export const sendWithdrawalAuthorizationEmail = async (
     'Please retain this authorization email as proof of your withdrawal dispatch.',
   ];
 
-  const mimeMessage = [
-    `To: ${toEmail}`,
-    `From: ${fromEmail}`,
-    `Subject: ${subject}`,
+  const headers = [
+    `To: ${rawToEmail}`,
+    ...(fromEmail && isValidEmailAddress(fromEmail) ? [`From: ${fromEmail}`] : []),
+    `Subject: ${sanitizeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: 7bit',
-    '',
-    bodyLines.join('\r\n'),
-  ].join('\r\n');
+  ];
+
+  const mimeMessage = [...headers, '', bodyLines.join('\r\n')].join('\r\n');
 
   try {
     const raw = encodeBase64Url(mimeMessage);

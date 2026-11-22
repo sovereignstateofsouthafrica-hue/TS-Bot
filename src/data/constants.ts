@@ -1,4 +1,4 @@
-import { Token, LiquidityPool, MiningMachinePackage, CloudAirdropToken, MiningNftAsset, StakePool, AdCampaignSlot, GoogleAdsConfig } from '../types';
+import { Token, LiquidityPool, MiningMachinePackage, CloudAirdropToken, MiningNftAsset, StakePool, AdCampaignSlot, GoogleAdsConfig, StoreProduct } from '../types';
 import nftHasherGenesisImg from '../assets/images/nft_hasher_genesis_1794617244256.jpg';
 import nftIrdVaultKeyImg from '../assets/images/nft_ird_vault_key_1794617247149.jpg';
 import nftMemeBullPassImg from '../assets/images/nft_meme_bull_pass_1794617247703.jpg';
@@ -1231,5 +1231,323 @@ export const INITIAL_CIP95_DREP_STATE = {
   ],
   lastSyncedAt: Date.now(),
 };
+
+// NFT & Meme Direct Links Helpers
+export function getAssetAppLink(assetId: string): string {
+  const base =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : CONTRACTS.LIVE_APP_URL;
+  return `${base}/?tab=airdrops&asset=${encodeURIComponent(assetId)}`;
+}
+
+export function getTokenBscScanLink(contractAddress: string): string {
+  return `https://bscscan.com/token/${contractAddress}`;
+}
+
+export function getNftBscScanLink(tokenId: string): string {
+  const numericOrCleanId = tokenId.replace(/^#/, '');
+  return `https://bscscan.com/token/${CONTRACTS.TS_NFT_CONTRACT}?a=${encodeURIComponent(numericOrCleanId)}`;
+}
+
+export function getMediaAssetLink(pathOrUrl: string): string {
+  if (!pathOrUrl) return '';
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl;
+  }
+  const base =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : CONTRACTS.LIVE_APP_URL;
+  return `${base}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
+}
+
+// Store Media & IRD Capitec Business Banking Details
+export const STORE_MEDIA = {
+  ENERGY_BULK_VIDEO: '/assets/aistudio/7B17EDA0-8686-43F0-9A64-8135E0A7A37C-CINEMATIC_2c69b179.mov',
+  IRD_WATER_IMAGE: '/assets/aistudio/9045e33d-602c-4a83-bc60-8160a811d645_bab8dca6.jpeg',
+  IRD_WATER_BULK_IMAGE: '/assets/aistudio/IMG_9541_4f2891c2.jpeg',
+  CAPITEC_BANKING_IMAGE: '/assets/aistudio/IMG_5172_1cb2e849.jpeg',
+  ROYAL_THRONE_IMAGE: '/assets/aistudio/IMG_9446_20dd6738.jpeg',
+  CHESTERFIELD_SOFA_IMAGE: '/assets/aistudio/IMG_9405_3b9f0990.jpeg',
+  WATCH_DUO_IMAGE: '/assets/aistudio/IMG_9400_79ed2996.jpeg',
+  FURNITURE_SUITE_IMAGE: '/assets/aistudio/IMG_9404_75ef69e0.jpeg',
+  CROWNS_COLLECTION_IMAGE: '/assets/aistudio/IMG_9401_d03626ad.jpeg',
+  LUGGAGE_SET_IMAGE: '/assets/aistudio/IMG_9397_448feadc.jpeg',
+  LEATHER_JACKET_IMAGE: '/assets/aistudio/IMG_9364_e8abb55c.jpeg',
+  LEATHER_JACKET_DETAIL_IMAGE: '/assets/aistudio/IMG_9361_893e0d0a.jpeg',
+  MERCH_KIT_IMAGE: '/assets/aistudio/IMG_9365_54c0903f.jpeg',
+} as const;
+
+export const IRD_CAPITEC_BANKING = {
+  bankName: 'Capitec Business',
+  accountHolder: 'Isiphahla Royal Dynasty (Pty)Ltd',
+  accountType: 'Current',
+  accountNumber: '1055652493',
+  branchCode: '450105',
+  paymentMethodTitle: 'IRD Capitec Business Banking (EFT)',
+} as const;
+
+export const STORE_DELIVERY_PERIOD = {
+  weeks: 3,
+  days: 21,
+  label: '3 Weeks (21 Calendar Days)',
+} as const;
+
+export function formatZAR(val: number): string {
+  return `R ${new Intl.NumberFormat('en-ZA', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(val)}`;
+}
+
+// Unique IRD Store Catalog — Zero Repeated Products, Strictly 1 Diesel & 1 Petroleum, Full Market Price Comparison
+export const STORE_PRODUCTS: StoreProduct[] = [
+  // Energy Bulk (Strictly 1 Diesel + 1 Petroleum)
+  {
+    id: 'energy-diesel-50ppm',
+    sku: 'IRD-ENG-D50',
+    category: 'ENERGY_BULK',
+    name: 'Bulk Diesel 50ppm (Ultra-Low Sulphur)',
+    unitLabel: 'Litre (Bulk)',
+    minQty: 1000,
+    stepQty: 500,
+    priceUsd: 1.18,
+    priceZar: 21.50,
+    marketPriceUsd: 1.28,
+    marketPriceZar: 23.40,
+    marketBenchmarkSource: 'SA DMRE Reef Wholesale Diesel 50ppm Index',
+    supplier: 'Madlingwe Holdings · Petrol, Diesel & Fuel Transport',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    videoUrl: STORE_MEDIA.ENERGY_BULK_VIDEO,
+    description:
+      'Sole Diesel 50ppm bulk allocation dispatched via Madlingwe Holdings heavy tanker fleet (up to 40,000L loads) for depots, generators, and commercial fleets.',
+  },
+  {
+    id: 'energy-petrol-95ulp',
+    sku: 'IRD-ENG-P95',
+    category: 'ENERGY_BULK',
+    name: 'Bulk Petroleum 95 Unleaded (ULP)',
+    unitLabel: 'Litre (Bulk)',
+    minQty: 1000,
+    stepQty: 500,
+    priceUsd: 1.22,
+    priceZar: 22.25,
+    marketPriceUsd: 1.32,
+    marketPriceZar: 24.15,
+    marketBenchmarkSource: 'SA DMRE Regulated 95 ULP Fuel Index',
+    supplier: 'Madlingwe Holdings · Petrol, Diesel & Fuel Transport',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    videoUrl: STORE_MEDIA.ENERGY_BULK_VIDEO,
+    description:
+      'Sole Petroleum 95 ULP wholesale supply on Purchase Order for filling stations, municipal depots, and fleet yards with refinery COA.',
+  },
+  // IRD Spring Water (Unique Bulk Pallet vs Family Range — Zero Duplicates)
+  {
+    id: 'water-bulk-wholesale',
+    sku: 'IRD-WTR-BULK',
+    category: 'IRD_WATER',
+    name: 'IRD Spring Water Bulk Wholesale Pallet (500ml · 1L · 5L · 10L)',
+    unitLabel: 'Full Wholesale Pallet',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 600.00,
+    priceZar: 10950.00,
+    marketPriceUsd: 700.00,
+    marketPriceZar: 12800.00,
+    marketBenchmarkSource: 'SA FMCG Wholesale Beverage Market Index',
+    supplier: 'IRD Spring Water · Wholesale Distribution',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.IRD_WATER_BULK_IMAGE,
+    description:
+      'Full warehouse wholesale pallet combining 500ml×24 cases, 1L×12 cases, 5L bulk packs, and 10L Spring Jugs for distributors, offices, and supermarkets.',
+  },
+  {
+    id: 'water-family-range',
+    sku: 'IRD-WTR-FAM',
+    category: 'IRD_WATER',
+    name: 'IRD Spring Water Family Range Combo (500ml, 1L, 5L & 10L)',
+    unitLabel: 'Family Range Bundle',
+    minQty: 5,
+    stepQty: 5,
+    priceUsd: 17.80,
+    priceZar: 325.00,
+    marketPriceUsd: 21.60,
+    marketPriceZar: 395.00,
+    marketBenchmarkSource: 'National Retail Bottled Spring Water Basket',
+    supplier: 'IRD Spring Water · Pure Natural Hydration',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.IRD_WATER_IMAGE,
+    description:
+      'Complete Family Range hydration bundle (500ml, 1 Litre, 5 Litre, and 10 Litre carry drum) sourced from pristine natural springs with zero additives.',
+  },
+  // IRD Blockchain Stores Luxury & Signature Collections (Each Image = 1 Unique Product)
+  {
+    id: 'ird-royal-throne-regalia',
+    sku: 'IRD-LUX-THR01',
+    category: 'IRD_LUXURY',
+    name: 'IRD Onchain Royal Carved Lion Throne & Embroidered Regalia Suite',
+    unitLabel: 'Complete Ceremonial Set',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 3000.00,
+    priceZar: 54800.00,
+    marketPriceUsd: 3750.00,
+    marketPriceZar: 68500.00,
+    marketBenchmarkSource: 'Custom Carved Gilded Throne & Bespoke Velvet Atelier Market',
+    supplier: 'IRD Onchain Network · Royal Heritage Atelier',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.ROYAL_THRONE_IMAGE,
+    description:
+      'Hand-carved gilded lion-armrest royal throne paired with matching gold-embroidered velvet king robe, crimson queen gown, and prince tunic.',
+  },
+  {
+    id: 'ird-chesterfield-lounge',
+    sku: 'IRD-LUX-LNG02',
+    category: 'IRD_LUXURY',
+    name: 'IRD Onchain TS BNB GOLD Burgundy Leather Chesterfield & Cushions',
+    unitLabel: 'Sofa + 3 Gold Crest Cushions',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 2000.00,
+    priceZar: 36500.00,
+    marketPriceUsd: 2520.00,
+    marketPriceZar: 46000.00,
+    marketBenchmarkSource: 'South African Executive Full-Grain Chesterfield Sofa Market',
+    supplier: 'IRD Blockchain Stores · Executive Interiors',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.CHESTERFIELD_SOFA_IMAGE,
+    description:
+      'Deep-tufted oxblood leather 3-seater Chesterfield sofa complete with three gold-embroidered velvet pillows: IRD Onchain Network, TS BNB GOLD & Hedge Laurel Gold.',
+  },
+  {
+    id: 'ird-laurel-watches',
+    sku: 'IRD-LUX-WCH03',
+    category: 'IRD_LUXURY',
+    name: 'IRD Blockchain Stores TS BNB GOLD Laurel Bezel Watch Duo (Gold & Silver)',
+    unitLabel: 'Collector Watch Pair (2 pcs)',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 1250.00,
+    priceZar: 22800.00,
+    marketPriceUsd: 1615.00,
+    marketPriceZar: 29500.00,
+    marketBenchmarkSource: 'Luxury Sculpted-Bezel Automatic Timepiece Retail Index',
+    supplier: 'IRD Blockchain Stores · Horology Division',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.WATCH_DUO_IMAGE,
+    description:
+      'Twin Limited-Edition 18K Gold-tone & Brushed Steel wristwatches with sculpted Hedge Laurel bezels, SA Flag crest dial, date cyclops, and President bracelet.',
+  },
+  {
+    id: 'ird-furniture-bedroom',
+    sku: 'IRD-LUX-FUR04',
+    category: 'IRD_LUXURY',
+    name: 'IRD Furniture Black & Gold Wingback Bedroom & Living Suite',
+    unitLabel: 'Full Room Furniture Suite',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 3750.00,
+    priceZar: 68400.00,
+    marketPriceUsd: 4600.00,
+    marketPriceZar: 84000.00,
+    marketBenchmarkSource: 'Designer Gold-Trimmed Showroom Bedroom Suite Index',
+    supplier: 'IRD Furniture · Luxury Onchain Home',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.FURNITURE_SUITE_IMAGE,
+    description:
+      'Complete luxury bedroom and lounge ensemble featuring tufted leather wingback bed frames, brass-inlaid marble coffee table, satin gold bedding, and nightstands.',
+  },
+  {
+    id: 'ird-crowns-collection',
+    sku: 'IRD-LUX-CRN05',
+    category: 'IRD_LUXURY',
+    name: 'IRD Crowns Collection — Hedge Laurel Gold & Platinum Sovereign Crowns',
+    unitLabel: 'Ceremonial Crown Pair',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 2250.00,
+    priceZar: 41000.00,
+    marketPriceUsd: 2850.00,
+    marketPriceZar: 52000.00,
+    marketBenchmarkSource: 'Bespoke Filigree & Gemstone Ceremonial Regalia Valuation',
+    supplier: 'IRD Crowns Collection · Treasury Vault',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.CROWNS_COLLECTION_IMAGE,
+    description:
+      'Matching dual sovereign filigree crowns in 24K Hedge Laurel Gold and White-Gold Diamond finish presented on a bespoke velvet & marble plinth.',
+  },
+  {
+    id: 'ird-luggage-set',
+    sku: 'IRD-LUX-LUG06',
+    category: 'IRD_LUXURY',
+    name: 'IRD Blockchain Stores Hedge Laurel Gold 3-Piece Travel Luggage Set',
+    unitLabel: '3-Piece Hardside Set',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 800.00,
+    priceZar: 14600.00,
+    marketPriceUsd: 1035.00,
+    marketPriceZar: 18900.00,
+    marketBenchmarkSource: 'Executive Monogram Hardside 3-Piece Travel Luggage Market',
+    supplier: 'IRD Blockchain Stores · Travel Gear',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.LUGGAGE_SET_IMAGE,
+    description:
+      'Three-piece brass-cornered luggage suite (Vanity trunk, Cabin spinner & Check-in trunk) stamped with IRD Onchain Network, TS BNB GOLD, and SA emblem.',
+  },
+  {
+    id: 'ird-leather-bomber',
+    sku: 'IRD-LUX-JKT07',
+    category: 'IRD_LUXURY',
+    name: 'IRD Onchain Hedge Laurel Gold Real Leather Bomber Jacket',
+    unitLabel: 'Single Jacket (S–3XL)',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 600.00,
+    priceZar: 10950.00,
+    marketPriceUsd: 778.00,
+    marketPriceZar: 14200.00,
+    marketBenchmarkSource: 'Full-Grain Lambskin Gold-Hardware Bomber Jacket Market',
+    supplier: 'IRD Blockchain Stores · Premium Outerwear',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.LEATHER_JACKET_IMAGE,
+    galleryImage: STORE_MEDIA.LEATHER_JACKET_DETAIL_IMAGE,
+    description:
+      'Full-grain black leather flight bomber with heavy knurled brass zipper, gold bullion Laurel wreath embroidery, and TS BNB GOLD cuff embossing.',
+  },
+  {
+    id: 'ird-apparel-kit',
+    sku: 'IRD-LUX-KIT08',
+    category: 'IRD_LUXURY',
+    name: 'IRD Onchain Network 4-Piece Apparel Kit (Bomber, Track Top, Tee & Cap)',
+    unitLabel: '4-Piece Merch Box',
+    minQty: 1,
+    stepQty: 1,
+    priceUsd: 400.00,
+    priceZar: 7300.00,
+    marketPriceUsd: 536.00,
+    marketPriceZar: 9800.00,
+    marketBenchmarkSource: 'Luxury 4-Piece Monogram Streetwear Bundle Retail Market',
+    supplier: 'IRD Blockchain Stores · Merchandise Division',
+    deliveryPeriodLabel: '3 Weeks (21 Days)',
+    deliveryDays: 21,
+    image: STORE_MEDIA.MERCH_KIT_IMAGE,
+    description:
+      'Four-piece official merchandise bundle pairing the satin gold-trim bomber, striped IRD track jacket, heavy cotton crest tee, and embroidered cap.',
+  },
+];
+
 
 

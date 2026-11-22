@@ -21,6 +21,8 @@ interface AlertsLedgerModalProps {
 export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, onClose }) => {
   const {
     alerts,
+    withdrawalEmail,
+    updateWithdrawalEmail,
     gmailAuthorized,
     gmailNeedsAuth,
     gmailAccountEmail,
@@ -36,6 +38,7 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
   const [confirmTestEmail, setConfirmTestEmail] = useState(false);
   const [confirmResendAlertId, setConfirmResendAlertId] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState<string>(withdrawalEmail || CONTRACTS.ALERT_EMAIL);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!isOpen) return null;
@@ -45,16 +48,26 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
     return a.type === filterType;
   });
 
+  const handleSaveWithdrawalEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = updateWithdrawalEmail(emailInput);
+    setFeedbackMsg({
+      type: res.success ? 'success' : 'error',
+      text: res.message,
+    });
+  };
+
   const handleConfirmTestEmail = async () => {
     setIsSendingEmail(true);
     setFeedbackMsg(null);
-    const res = await sendTestWithdrawalAuthEmail();
+    const targetEmail = emailInput.trim() || withdrawalEmail || CONTRACTS.ALERT_EMAIL;
+    const res = await sendTestWithdrawalAuthEmail(targetEmail);
     setIsSendingEmail(false);
     setConfirmTestEmail(false);
     if (res.delivered) {
       setFeedbackMsg({
         type: 'success',
-        text: `Test withdrawal authorization email sent via Gmail to ${CONTRACTS.ALERT_EMAIL} (Message ID: ${res.messageId}).`,
+        text: `Test withdrawal authorization email sent via Gmail to ${targetEmail} (Message ID: ${res.messageId}).`,
       });
     } else {
       setFeedbackMsg({
@@ -67,13 +80,14 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
   const handleConfirmResendAlert = async (alertId: string) => {
     setIsSendingEmail(true);
     setFeedbackMsg(null);
-    const res = await dispatchWithdrawalEmailForAlert(alertId);
+    const targetEmail = emailInput.trim() || withdrawalEmail || CONTRACTS.ALERT_EMAIL;
+    const res = await dispatchWithdrawalEmailForAlert(alertId, targetEmail);
     setIsSendingEmail(false);
     setConfirmResendAlertId(null);
     if (res.delivered) {
       setFeedbackMsg({
         type: 'success',
-        text: `Withdrawal authorization email sent via Gmail to ${CONTRACTS.ALERT_EMAIL} (Message ID: ${res.messageId}).`,
+        text: `Withdrawal authorization email sent via Gmail to ${targetEmail} (Message ID: ${res.messageId}).`,
       });
     } else {
       setFeedbackMsg({
@@ -98,7 +112,7 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
               </h3>
               <p className="text-xs text-zinc-400 font-mono flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5 text-amber-400" />
-                <span>Authorized Recipient: {CONTRACTS.ALERT_EMAIL}</span>
+                <span>Authorized Recipient: {withdrawalEmail}</span>
               </p>
             </div>
           </div>
@@ -132,11 +146,11 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
               <p className="text-[11px] text-zinc-400 leading-relaxed">
                 {gmailAuthorized ? (
                   <>
-                    Connected as <strong className="text-emerald-300 font-mono">{gmailAccountEmail || CONTRACTS.ALERT_EMAIL}</strong>. Real withdrawal authorization emails deliver directly to <strong className="text-white font-mono">{CONTRACTS.ALERT_EMAIL}</strong>.
+                    Connected as <strong className="text-emerald-300 font-mono">{gmailAccountEmail || withdrawalEmail}</strong>. Real withdrawal authorization emails deliver directly to <strong className="text-white font-mono">{withdrawalEmail}</strong>.
                   </>
                 ) : (
                   <>
-                    Sign in with Google (<strong className="text-amber-300 font-mono">{CONTRACTS.ALERT_EMAIL}</strong>) so withdrawals transmit real authorization emails to your Gmail inbox.
+                    Sign in with Google (<strong className="text-amber-300 font-mono">{withdrawalEmail}</strong>) so withdrawals transmit real authorization emails to your Gmail inbox.
                   </>
                 )}
               </p>
@@ -173,13 +187,47 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
             </div>
           </div>
 
+          {/* Editable Withdrawal Recipient Email Address Bar */}
+          <form onSubmit={handleSaveWithdrawalEmail} className="pt-2 border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-[11px] font-semibold text-zinc-300 shrink-0">
+              Recipient Email:
+            </label>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder={CONTRACTS.ALERT_EMAIL}
+              className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+              required
+            />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="submit"
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+              >
+                Save Email
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailInput(CONTRACTS.ALERT_EMAIL);
+                  const res = updateWithdrawalEmail(CONTRACTS.ALERT_EMAIL);
+                  setFeedbackMsg({ type: res.success ? 'success' : 'error', text: res.message });
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-mono cursor-pointer"
+              >
+                Default
+              </button>
+            </div>
+          </form>
+
           {confirmTestEmail && (
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 space-y-2">
               <div className="text-amber-200 font-semibold">
                 Confirm sending a test withdrawal authorization email via Gmail?
               </div>
               <div className="text-[11px] text-zinc-300 font-mono">
-                To: {CONTRACTS.ALERT_EMAIL} • Subject: [TS PROTOCOL] Withdrawal Email Authorization Sync Verified
+                To: {emailInput.trim() || withdrawalEmail} • Subject: [TS PROTOCOL] Withdrawal Email Authorization Sync Verified
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <button
@@ -324,7 +372,7 @@ export const AlertsLedgerModal: React.FC<AlertsLedgerModalProps> = ({ isOpen, on
                 {confirmResendAlertId === alert.id && (
                   <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/35 space-y-2 mt-2">
                     <div className="text-[11px] text-amber-200 font-sans font-semibold">
-                      Send withdrawal authorization email for {alert.amountBnb.toFixed(4)} BNB ({formatUSD(alert.amountUsd)}) to {CONTRACTS.ALERT_EMAIL}?
+                      Send withdrawal authorization email for {alert.amountBnb.toFixed(4)} BNB ({formatUSD(alert.amountUsd)}) to {emailInput.trim() || withdrawalEmail}?
                     </div>
                     {gmailNeedsAuth ? (
                       <div className="flex items-center justify-between gap-2">

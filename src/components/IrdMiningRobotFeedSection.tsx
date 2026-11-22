@@ -24,6 +24,7 @@ import {
   formatUSD,
   shortenAddress,
 } from '../data/constants';
+import { isValidEmailAddress } from '../utils/gmailAuth';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
 interface IrdMiningRobotFeedSectionProps {
@@ -56,6 +57,8 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
     addMinedYieldBnb,
     processWithdrawalBnb,
     refreshTokenBalances,
+    withdrawalEmail,
+    updateWithdrawalEmail,
     gmailAuthorized,
     gmailNeedsAuth,
     gmailAccountEmail,
@@ -88,6 +91,9 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
     wallet.address && wallet.address.startsWith('0x') && wallet.address.length > 12
       ? wallet.address
       : irdWalletAddress || CONTRACTS.RECHARGE_ROUTER_DEFI
+  );
+  const [withdrawEmailInput, setWithdrawEmailInput] = useState<string>(
+    withdrawalEmail || CONTRACTS.ALERT_EMAIL
   );
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [pendingInlineConfirm, setPendingInlineConfirm] = useState(false);
@@ -175,6 +181,15 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
       return;
     }
 
+    const cleanedEmail = withdrawEmailInput.trim();
+    if (!isValidEmailAddress(cleanedEmail)) {
+      setWithdrawError(
+        `Please enter a valid withdrawal email address (e.g. ${CONTRACTS.ALERT_EMAIL}).`
+      );
+      return;
+    }
+    updateWithdrawalEmail(cleanedEmail);
+
     setPendingInlineConfirm(true);
   };
 
@@ -182,6 +197,7 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
     const amount = parseFloat(withdrawBnbInput);
     if (isNaN(amount) || amount <= 0) return;
 
+    const targetEmail = withdrawEmailInput.trim() || withdrawalEmail || CONTRACTS.ALERT_EMAIL;
     const requestedUsd = amount * bnbPrice;
     setIsWithdrawing(true);
 
@@ -189,12 +205,13 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
       amount,
       recipientInput.trim(),
       `Unified TS BOT & IRD Mining Profit Withdrawal: ${amount.toFixed(4)} BNB ($${requestedUsd.toFixed(2)}) dispatched in-app with $1.00 charge.`,
-      'miner'
+      'miner',
+      targetEmail
     );
 
     if (res.success && res.alert) {
       refreshTokenBalances('WITHDRAWAL');
-      const emailRes = await dispatchWithdrawalEmailForAlert(res.alert);
+      const emailRes = await dispatchWithdrawalEmailForAlert(res.alert, targetEmail);
       setWithdrawReceipt({
         ...res.alert,
         gmailDeliveryStatus: emailRes.delivered
@@ -234,7 +251,7 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
           </h2>
 
           <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
-            TS BOT and IRD Mining share <strong className="text-amber-300">one unified BNB mining balance</strong> inside the same app and view. Syncing or claiming profits never resets or decreases your Mining Dashboard progress, and withdrawal authorization emails send directly via Gmail to <strong className="text-white font-mono">{CONTRACTS.ALERT_EMAIL}</strong>.
+            TS BOT and IRD Mining share <strong className="text-amber-300">one unified BNB mining balance</strong> inside the same app and view. Syncing or claiming profits never resets or decreases your Mining Dashboard progress, and withdrawal authorization emails send directly via Gmail to <strong className="text-white font-mono">{withdrawalEmail}</strong>.
           </p>
         </div>
 
@@ -472,11 +489,11 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
             <div>
               <div className="text-white font-semibold flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5 text-amber-400" />
-                <span>Gmail Auth: {CONTRACTS.ALERT_EMAIL}</span>
+                <span>Gmail Auth: {withdrawEmailInput || withdrawalEmail}</span>
               </div>
               <div className="text-[11px] text-zinc-400">
                 {gmailAuthorized
-                  ? `Synced (${gmailAccountEmail || CONTRACTS.ALERT_EMAIL})`
+                  ? `Synced (${gmailAccountEmail || withdrawalEmail})`
                   : 'Connect Google to receive real withdrawal emails'}
               </div>
             </div>
@@ -590,7 +607,7 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
                 <span>Confirm Withdrawal & Gmail Email Dispatch</span>
               </div>
               <p className="text-zinc-200 leading-relaxed">
-                Send withdrawal authorization email to <strong className="font-mono text-white">{CONTRACTS.ALERT_EMAIL}</strong> and withdraw{' '}
+                Send withdrawal authorization email to <strong className="font-mono text-white">{withdrawEmailInput.trim()}</strong> and withdraw{' '}
                 <strong className="font-mono text-amber-300">
                   {(parseFloat(withdrawBnbInput) || 0).toFixed(4)} BNB
                 </strong>{' '}
@@ -672,6 +689,27 @@ export const IrdMiningRobotFeedSection: React.FC<IrdMiningRobotFeedSectionProps>
                   onChange={(e) => setRecipientInput(e.target.value)}
                   placeholder="0x..."
                   className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 font-mono text-xs focus:outline-none focus:border-emerald-500/60"
+                  required
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-zinc-400">Withdrawal Email Address</label>
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawEmailInput(CONTRACTS.ALERT_EMAIL)}
+                    className="text-[10px] text-amber-400 hover:underline font-mono cursor-pointer"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+                <input
+                  type="email"
+                  value={withdrawEmailInput}
+                  onChange={(e) => setWithdrawEmailInput(e.target.value)}
+                  placeholder={CONTRACTS.ALERT_EMAIL}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
                   required
                 />
               </div>

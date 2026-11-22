@@ -28,7 +28,8 @@ import {
   Gift,
   Banknote,
   Landmark,
-  Mail
+  Mail,
+  ShoppingBag
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
 import { CONTRACTS, shortenAddress } from '../data/constants';
@@ -61,6 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     alerts, 
     currentUser, 
     logoutUser,
+    withdrawalEmail,
     gmailAuthorized,
     gmailAccountEmail
   } = useProtocol();
@@ -87,6 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'machines', label: 'TS Mining Machines', icon: Cpu, badge: 'GEN 2' },
     { id: 'mining', label: 'Binance Mining Cloud', icon: Radio, badge: 'HOT' },
     { id: 'airdrops', label: 'Airdrops & NFTs', icon: Gift, badge: 'FEED' },
+    { id: 'store', label: 'IRD Store & POs', icon: ShoppingBag, badge: '3W' },
     { id: 'bot', label: 'TS BOT Engine', icon: Bot, badge: 'LIVE' },
     { id: 'liquidity', label: 'Liquidity & Tiers', icon: Zap },
     { id: 'stakepools', label: 'Stake Pools', icon: Landmark, badge: 'RWA' },
@@ -199,8 +202,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
               title={
                 gmailAuthorized
-                  ? `Gmail Withdrawal Auth Synced (${gmailAccountEmail || CONTRACTS.ALERT_EMAIL})`
-                  : `Sync Gmail Withdrawal Authorization (${CONTRACTS.ALERT_EMAIL})`
+                  ? `Gmail Withdrawal Auth Synced (${gmailAccountEmail || withdrawalEmail})`
+                  : `Sync Gmail Withdrawal Authorization (${withdrawalEmail})`
               }
             >
               <Mail className="w-3.5 h-3.5" />

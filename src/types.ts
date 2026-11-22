@@ -419,3 +419,75 @@ export interface GovernmentSubmission {
     | 'LAUNCH_READY'
     | 'VERIFIED_ANCHOR';
 }
+
+export type StoreCategory = 'ENERGY_BULK' | 'IRD_WATER' | 'IRD_LUXURY';
+export type StorePaymentMethod = 'IRD_CAPITEC_BANKING' | 'BNB_CHAIN' | 'USDT_BEP20';
+
+export interface StoreProduct {
+  id: string;
+  sku: string;
+  category: StoreCategory;
+  name: string;
+  unitLabel: string;
+  minQty: number;
+  stepQty: number;
+  priceUsd: number;
+  priceZar: number;
+  marketPriceUsd: number;
+  marketPriceZar: number;
+  marketBenchmarkSource: string;
+  supplier: string;
+  deliveryPeriodLabel: string;
+  deliveryDays: number;
+  image?: string;
+  galleryImage?: string;
+  videoUrl?: string;
+  description: string;
+}
+
+export interface StoreOrderLineItem {
+  productId: string;
+  sku: string;
+  category: StoreCategory;
+  name: string;
+  unitLabel: string;
+  quantity: number;
+  unitPriceUsd: number;
+  unitPriceZar: number;
+  marketUnitPriceUsd?: number;
+  marketUnitPriceZar?: number;
+  lineTotalUsd: number;
+  lineTotalZar: number;
+}
+
+export interface StorePurchaseOrder {
+  id: string;
+  poNumber: string;
+  createdAt: number;
+  estimatedDeliveryAt: number;
+  deliveryPeriodLabel: string;
+  deliveryDays: number;
+  category: StoreCategory | 'MIXED';
+  items: StoreOrderLineItem[];
+  totalUsd: number;
+  totalZar: number;
+  buyerName: string;
+  companyName?: string;
+  buyerEmail: string;
+  buyerPhone: string;
+  deliveryAddress: string;
+  deliveryProvince: string;
+  orderNotes?: string;
+  paymentMethod: StorePaymentMethod;
+  paymentReference: string;
+  bankProofReference?: string;
+  bankAccountUsed?: {
+    bankName: string;
+    accountHolder: string;
+    accountType: string;
+    accountNumber: string;
+    branchCode: string;
+  };
+  status: 'PO_CONFIRMED_3W_DISPATCH' | 'AWAITING_EFT_CLEARANCE' | 'PAID_VERIFIED';
+}
+

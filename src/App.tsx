@@ -22,6 +22,7 @@ import { AirdropsMemeNftView } from './components/AirdropsMemeNftView';
 import { PaycheckNavigatorView } from './components/PaycheckNavigatorView';
 import { StakePoolsView } from './components/StakePoolsView';
 import { Cip95GovernmentView } from './components/Cip95GovernmentView';
+import { StoreOrdersView } from './components/StoreOrdersView';
 import { VideoTsNftMiniScreen } from './components/VideoTsNftMiniScreen';
 import { GoogleBusinessPopupAd } from './components/GoogleBusinessPopupAd';
 import { Footer } from './components/Footer';
@@ -36,8 +37,17 @@ export function AppContent() {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
       if (tabParam) return tabParam;
+      if (params.get('asset')) return 'airdrops';
     } catch {}
     return 'dashboard';
+  });
+  const [focusedAssetId] = useState<string | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('asset');
+    } catch {
+      return null;
+    }
   });
   const [walletModalOpen, setWalletModalOpen] = useState<boolean>(false);
   const [rechargeModalOpen, setRechargeModalOpen] = useState<boolean>(false);
@@ -160,8 +170,10 @@ export function AppContent() {
             onOpenWithdrawal={() => setWithdrawalModalOpen(true)}
             onGoToStakePools={() => setActiveTab('stakepools')}
             onGoToGov={() => setActiveTab('gov')}
+            focusedAssetId={focusedAssetId}
           />
         )}
+        {activeTab === 'store' && <StoreOrdersView />}
         {activeTab === 'bot' && (
           <TradingBotView 
             onOpenRecharge={() => setRechargeModalOpen(true)}

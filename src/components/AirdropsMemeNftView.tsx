@@ -18,21 +18,35 @@ import {
   Megaphone,
   Landmark,
   Film,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
-import { CONTRACTS, formatUSD, MINING_FEED_RULES, shortenAddress, WITHDRAWAL_RULES } from '../data/constants';
+import {
+  CONTRACTS,
+  formatUSD,
+  MINING_FEED_RULES,
+  shortenAddress,
+  WITHDRAWAL_RULES,
+  getAssetAppLink,
+  getTokenBscScanLink,
+  getNftBscScanLink,
+  getMediaAssetLink,
+} from '../data/constants';
 import { AdCampaignSlot, MiningNftAsset } from '../types';
 
 interface AirdropsMemeNftViewProps {
   onOpenWithdrawal?: () => void;
   onGoToStakePools?: () => void;
   onGoToGov?: () => void;
+  focusedAssetId?: string | null;
 }
 
 export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
   onOpenWithdrawal,
   onGoToStakePools,
   onGoToGov,
+  focusedAssetId,
 }) => {
   const {
     cloudAirdropTokens,
@@ -79,6 +93,31 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
   const [filterTab, setFilterTab] = useState<'ALL' | 'CLOUD_AIRDROP' | 'MEME_TOKEN' | 'NFT' | 'ADS'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedLinkKey, setCopiedLinkKey] = useState<string | null>(null);
+
+  const handleCopyLink = (key: string, url: string, label: string) => {
+    try {
+      navigator.clipboard.writeText(url);
+      setCopiedLinkKey(key);
+      setTimeout(() => setCopiedLinkKey((prev) => (prev === key ? null : prev)), 2500);
+      showFeedback('success', `Copied direct link for ${label}: ${url}`);
+    } catch {
+      showFeedback('error', 'Clipboard copy was blocked by browser permissions.');
+    }
+  };
+
+  const handleCopyAllAssetLinks = () => {
+    const nftLines = miningNfts.map(
+      (n) =>
+        `NFT ${n.tokenId} (${n.name}) -> App: ${getAssetAppLink(n.id)} | BscScan: ${getNftBscScanLink(n.tokenId)} | Media: ${getMediaAssetLink(n.videoUrl || n.image)}`
+    );
+    const tokenLines = cloudAirdropTokens.map(
+      (t) =>
+        `${t.category === 'MEME_TOKEN' ? 'MEME' : 'AIRDROP'} ${t.symbol} (${t.name}) -> App: ${getAssetAppLink(t.id)} | Contract: ${getTokenBscScanLink(t.contractAddress)}`
+    );
+    const payload = [...nftLines, ...tokenLines].join('\n');
+    handleCopyLink('ALL_ASSETS', payload, 'all NFTs & Meme tokens');
+  };
 
   // Create TS MEM / TS NFT Studio State
   const [showCreateNft, setShowCreateNft] = useState<boolean>(true);
@@ -528,12 +567,18 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
               const isFeeding = token.isFeedingMining;
               const dailyBnb = token.dailyFeedUsd / WITHDRAWAL_RULES.BNB_PRICE_USD;
               const positionUsd = (token.claimedAmount || token.claimableAmount) * token.priceUsd;
+              const appLink = getAssetAppLink(token.id);
+              const explorerLink = getTokenBscScanLink(token.contractAddress);
+              const isFocused = focusedAssetId === token.id;
 
               return (
                 <div
                   key={token.id}
+                  id={`asset-${token.id}`}
                   className={`rounded-2xl border p-5 flex flex-col justify-between gap-4 transition-colors ${
-                    isFeeding
+                    isFocused
+                      ? 'bg-zinc-900 border-amber-400 ring-2 ring-amber-400/50'
+                      : isFeeding
                       ? 'bg-zinc-900 border-amber-500/50'
                       : 'bg-zinc-900/80 border-zinc-800'
                   }`}
@@ -582,6 +627,39 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                       <span className="text-zinc-300 tabular-nums">
                         Fed: {token.totalFedBnb.toFixed(4)} BNB
                       </span>
+                    </div>
+
+                    {/* Direct Links Strip for Meme Token / Airdrop */}
+                    <div className="rounded-xl bg-zinc-950 border border-zinc-800/90 p-2.5 space-y-1.5 text-[11px] font-mono">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-zinc-500 truncate">{appLink}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyLink(`tok-${token.id}`, appLink, token.symbol)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-300 shrink-0 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>{copiedLinkKey === `tok-${token.id}` ? 'Copied' : 'Copy Link'}</span>
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <a
+                          href={appLink}
+                          className="inline-flex items-center gap-1 text-emerald-400 hover:underline"
+                        >
+                          <Link2 className="w-3 h-3" />
+                          <span>Open Asset URL</span>
+                        </a>
+                        <a
+                          href={explorerLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-amber-400 hover:underline"
+                        >
+                          <span>BscScan BEP-20</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
                     </div>
                   </div>
 
@@ -914,12 +992,19 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                 const linkedNftIds = nft.linkedNftIds || [];
                 const rwaValUsd = nft.rwaValueUsd ?? 1.00;
                 const isPoolsExpanded = expandedNftPoolsId === nft.id;
+                const nftAppLink = getAssetAppLink(nft.id);
+                const nftExplorerLink = getNftBscScanLink(nft.tokenId);
+                const nftMediaLink = getMediaAssetLink(nft.videoUrl || nft.image);
+                const isFocused = focusedAssetId === nft.id;
 
                 return (
                   <div
                     key={nft.id}
+                    id={`asset-${nft.id}`}
                     className={`rounded-2xl border overflow-hidden flex flex-col justify-between transition-colors ${
-                      nft.isStakedFeeding
+                      isFocused
+                        ? 'bg-zinc-900 border-amber-400 ring-2 ring-amber-400/50'
+                        : nft.isStakedFeeding
                         ? 'bg-zinc-900 border-amber-500/60'
                         : 'bg-zinc-900/80 border-zinc-800'
                     }`}
@@ -1000,6 +1085,41 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
                             <span className="text-zinc-400 text-[11px] block">
                               {linkedNftIds.length} NFTs · {connectedPoolIds.length} RWA pools
                             </span>
+                          </div>
+                        </div>
+
+                        {/* Direct NFT Links Strip */}
+                        <div className="rounded-xl bg-zinc-950 border border-zinc-800 p-2.5 space-y-1.5 text-[11px] font-mono">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-zinc-500 truncate">{nftAppLink}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLink(`nft-${nft.id}`, nftAppLink, nft.tokenId)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-300 shrink-0 cursor-pointer"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>{copiedLinkKey === `nft-${nft.id}` ? 'Copied' : 'Copy'}</span>
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <a
+                              href={nftExplorerLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-emerald-400 hover:underline"
+                            >
+                              <span>BscScan {nft.tokenId}</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <a
+                              href={nftMediaLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-amber-400 hover:underline"
+                            >
+                              <span>Media URL</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
                           </div>
                         </div>
 
@@ -1523,6 +1643,142 @@ export const AirdropsMemeNftView: React.FC<AirdropsMemeNftViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* Direct Links Directory — Every NFT & Meme Token */}
+      <section className="rounded-2xl bg-zinc-900 border border-amber-500/30 p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800">
+          <div>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-amber-400" />
+              <span>Direct Links Directory — Every TS NFT, Meme Token & Cloud Airdrop</span>
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Verified app deep links, BEP-20/BEP-721 BscScan explorer URLs, and direct media links for every NFT and Meme token.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyAllAssetLinks}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>{copiedLinkKey === 'ALL_ASSETS' ? 'All Links Copied' : 'Copy All NFT & Meme Links'}</span>
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-zinc-500 border-b border-zinc-800">
+                <th className="py-2.5 pr-4 font-semibold">Asset Name</th>
+                <th className="py-2.5 px-4 font-semibold">Type / ID</th>
+                <th className="py-2.5 px-4 font-semibold">App Direct Link</th>
+                <th className="py-2.5 px-4 font-semibold">BscScan Explorer</th>
+                <th className="py-2.5 pl-4 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/70 font-mono tabular-nums">
+              {miningNfts.map((nft) => {
+                const appUrl = getAssetAppLink(nft.id);
+                const scanUrl = getNftBscScanLink(nft.tokenId);
+                const mediaUrl = getMediaAssetLink(nft.videoUrl || nft.image);
+                return (
+                  <tr
+                    key={`dir-nft-${nft.id}`}
+                    className={`hover:bg-zinc-800/30 transition-colors ${
+                      focusedAssetId === nft.id ? 'bg-amber-500/10' : ''
+                    }`}
+                  >
+                    <td className="py-2.5 pr-4 font-sans font-bold text-white">{nft.name}</td>
+                    <td className="py-2.5 px-4 text-amber-300">
+                      {nft.isMemeNft ? 'TS MEM NFT' : 'TS NFT'} · {nft.tokenId}
+                    </td>
+                    <td className="py-2.5 px-4 max-w-[260px]">
+                      <a href={appUrl} className="text-emerald-400 hover:underline truncate block">
+                        {appUrl}
+                      </a>
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <a
+                        href={scanUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-zinc-300 hover:text-amber-300"
+                      >
+                        <span>BscScan {nft.tokenId}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </td>
+                    <td className="py-2.5 pl-4 text-right whitespace-nowrap space-x-2">
+                      <a
+                        href={mediaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-sans font-semibold"
+                      >
+                        <span>Media</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(`dir-nft-${nft.id}`, appUrl, nft.tokenId)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-sans font-semibold cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>{copiedLinkKey === `dir-nft-${nft.id}` ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {cloudAirdropTokens.map((tok) => {
+                const appUrl = getAssetAppLink(tok.id);
+                const scanUrl = getTokenBscScanLink(tok.contractAddress);
+                return (
+                  <tr
+                    key={`dir-tok-${tok.id}`}
+                    className={`hover:bg-zinc-800/30 transition-colors ${
+                      focusedAssetId === tok.id ? 'bg-amber-500/10' : ''
+                    }`}
+                  >
+                    <td className="py-2.5 pr-4 font-sans font-bold text-white">{tok.name}</td>
+                    <td className="py-2.5 px-4 text-emerald-300">
+                      {tok.category === 'MEME_TOKEN' ? 'Meme Token' : 'Cloud Airdrop'} · {tok.symbol}
+                    </td>
+                    <td className="py-2.5 px-4 max-w-[260px]">
+                      <a href={appUrl} className="text-emerald-400 hover:underline truncate block">
+                        {appUrl}
+                      </a>
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <a
+                        href={scanUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-zinc-300 hover:text-amber-300"
+                      >
+                        <span>{shortenAddress(tok.contractAddress)}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </td>
+                    <td className="py-2.5 pl-4 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(`dir-tok-${tok.id}`, appUrl, tok.symbol)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-sans font-semibold cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>{copiedLinkKey === `dir-tok-${tok.id}` ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* Mining Profit Feed Settlement Ledger */}
       <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4">

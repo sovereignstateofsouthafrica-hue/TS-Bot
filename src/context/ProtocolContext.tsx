@@ -23,7 +23,11 @@ import {
   GoogleAdsConfig,
   GoogleAdsConversionEvent,
   Cip95DRepState,
-  GovernmentSubmission
+  GovernmentSubmission,
+  StoreCategory,
+  StorePaymentMethod,
+  StoreOrderLineItem,
+  StorePurchaseOrder,
 } from '../types';
 import { 
   INITIAL_POOLS, 
@@ -41,6 +45,8 @@ import {
   GOOGLE_ADS_DEFAULT_CONFIG,
   INITIAL_CIP95_DREP_STATE,
   GOVERNMENT_SUBMISSION_AGENCIES,
+  IRD_CAPITEC_BANKING,
+  STORE_DELIVERY_PERIOD,
   calculateAmountOut, 
   shortenAddress 
 } from '../data/constants';
@@ -52,6 +58,7 @@ import {
   getGmailUserEmail,
   logoutGmailAuth,
   sendWithdrawalAuthorizationEmail,
+  isValidEmailAddress,
   WithdrawalEmailResult,
 } from '../utils/gmailAuth';
 
@@ -82,12 +89,15 @@ interface ProtocolContextType {
     amountBnb: number, 
     recipientAddress: string, 
     note?: string,
-    source?: 'miner' | 'wallet'
+    source?: 'miner' | 'wallet',
+    recipientEmailOverride?: string
   ) => { success: boolean; message: string; alert?: CryptoAlert };
   addMinedYieldBnb: (amountBnb: number) => void;
   alerts: CryptoAlert[];
   activeAlertToast: CryptoAlert | null;
   dismissAlertToast: () => void;
+  withdrawalEmail: string;
+  updateWithdrawalEmail: (email: string) => { success: boolean; message: string };
   gmailAuthorized: boolean;
   gmailNeedsAuth: boolean;
   gmailAccountEmail: string | null;
@@ -96,9 +106,10 @@ interface ProtocolContextType {
   connectGmailAuthorization: () => Promise<{ success: boolean; email?: string; error?: string }>;
   disconnectGmailAuthorization: () => Promise<void>;
   dispatchWithdrawalEmailForAlert: (
-    alertOrId: CryptoAlert | string
+    alertOrId: CryptoAlert | string,
+    overrideEmail?: string
   ) => Promise<WithdrawalEmailResult>;
-  sendTestWithdrawalAuthEmail: () => Promise<WithdrawalEmailResult>;
+  sendTestWithdrawalAuthEmail: (overrideEmail?: string) => Promise<WithdrawalEmailResult>;
   referralUsers: ReferralUser[];
   unclaimedCommissionBnb: number;
   claimReferralCommission: () => { success: boolean; message: string; amountBnb: number; amountUsd: number };
@@ -255,6 +266,19 @@ interface ProtocolContextType {
     collectedUsd: number;
     collectedBnb: number;
   };
+  storeOrders: StorePurchaseOrder[];
+  submitStorePurchaseOrder: (params: {
+    items: StoreOrderLineItem[];
+    buyerName: string;
+    companyName?: string;
+    buyerEmail: string;
+    buyerPhone: string;
+    deliveryAddress: string;
+    deliveryProvince: string;
+    orderNotes?: string;
+    paymentMethod: StorePaymentMethod;
+    bankProofReference?: string;
+  }) => { success: boolean; message: string; order?: StorePurchaseOrder };
 }
 
 const ProtocolContext = createContext<ProtocolContextType | null>(null);
@@ -298,6 +322,29 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
   });
   const walletRef = useRef<WalletState>(wallet);
   const [lastBalanceRefreshAt, setLastBalanceRefreshAt] = useState<number>(() => Date.now());
+
+  // Validated Withdrawal Email Address (persisted, defaulting cleanly to sovereignstateofsouthafrica@gmail.com)
+  const [withdrawalEmail, setWithdrawalEmailState] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_withdrawal_email');
+      if (stored && isValidEmailAddress(stored)) {
+        return stored.trim();
+      }
+    } catch (e) {}
+    return CONTRACTS.ALERT_EMAIL;
+  });
+
+  // Store Purchase Orders State (Energy Bulk & IRD Water with 3-Week Delivery & IRD Capitec Banking)
+  const [storeOrders, setStoreOrders] = useState<StorePurchaseOrder[]>(() => {
+    try {
+      const stored = localStorage.getItem('ts_bot_store_orders');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
   // Gmail Withdrawal Authorization Sync State (in-memory token only)
   const [gmailAuthorized, setGmailAuthorized] = useState<boolean>(() => Boolean(getGmailAccessToken()));
@@ -2167,13 +2214,34 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
 
   // Process Withdrawal BNB (Withdrawal crypto button form)
   // RULE 1: Withdrawal starts from $15.00 USD
+  const updateWithdrawalEmail = (email: string): { success: boolean; message: string } => {
+    const cleaned = email.trim();
+    if (!isValidEmailAddress(cleaned)) {
+      return {
+        success: false,
+        message: `Please enter a valid withdrawal email address (for example: ${CONTRACTS.ALERT_EMAIL}).`,
+      };
+    }
+    setWithdrawalEmailState(cleaned);
+    try {
+      localStorage.setItem('ts_bot_withdrawal_email', cleaned);
+    } catch (e) {}
+    setGmailLastSyncMessage(`Withdrawal notification email updated to ${cleaned}.`);
+    return {
+      success: true,
+      message: `Withdrawal notification email saved: ${cleaned}`,
+    };
+  };
+
+  // RULE 1: Withdrawal starts from $15.00 USD
   // RULE 2: BNB miner must have mined $16.00 USD to withdraw $15.00 because of $1.00 Withdrawal charges
-  // ONLY withdrawals must request on email: sovereignstateofsouthafrica@gmail.com
+  // ONLY withdrawals dispatch authorization email to validated withdrawalEmail (default: sovereignstateofsouthafrica@gmail.com)
   const processWithdrawalBnb = (
     amountBnb: number, 
     recipientAddress: string, 
     note?: string,
-    source: 'miner' | 'wallet' = 'miner'
+    source: 'miner' | 'wallet' = 'miner',
+    recipientEmailOverride?: string
   ) => {
     const bnbRate = WITHDRAWAL_RULES.BNB_PRICE_USD;
     const amountUsd = amountBnb * bnbRate;
@@ -2181,6 +2249,21 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     const withdrawalChargeBnb = withdrawalChargeUsd / bnbRate; // ~0.001627 BNB
     const totalRequiredBnb = amountBnb + withdrawalChargeBnb;
     const totalRequiredUsd = amountUsd + withdrawalChargeUsd;
+
+    const targetEmail = (recipientEmailOverride || withdrawalEmail || CONTRACTS.ALERT_EMAIL).trim();
+    if (!isValidEmailAddress(targetEmail)) {
+      return {
+        success: false,
+        message: `Invalid withdrawal email address "${targetEmail}". Please fix the withdrawal email address (e.g. ${CONTRACTS.ALERT_EMAIL}).`,
+      };
+    }
+
+    if (targetEmail !== withdrawalEmail) {
+      setWithdrawalEmailState(targetEmail);
+      try {
+        localStorage.setItem('ts_bot_withdrawal_email', targetEmail);
+      } catch (e) {}
+    }
 
     // Rule 1: Withdrawal starts from $15.00 USD
     if (amountUsd < WITHDRAWAL_RULES.MIN_WITHDRAWAL_USD - 0.05) {
@@ -2275,7 +2358,6 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       randomHash += hexChars[Math.floor(Math.random() * hexChars.length)];
     }
 
-    // ONLY withdrawals dispatch email request to: sovereignstateofsouthafrica@gmail.com
     const newAlert: CryptoAlert = {
       id: `alert-wd-${Date.now()}`,
       type: 'WITHDRAWAL',
@@ -2289,9 +2371,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       txHash: randomHash,
       timestamp: Date.now(),
       status: 'DISPATCHED',
-      recipientEmail: CONTRACTS.ALERT_EMAIL, // sovereignstateofsouthafrica@gmail.com
+      recipientEmail: targetEmail,
       blockNumber: currentBlock,
-      note: note || `Official BNB Withdrawal: $${amountUsd.toFixed(2)} (${amountBnb.toFixed(4)} BNB) dispatched. $${withdrawalChargeUsd.toFixed(2)} withdrawal charge applied ($${totalRequiredUsd.toFixed(2)} total debited from miner). Official verification sent to ${CONTRACTS.ALERT_EMAIL}`,
+      note: note || `Official BNB Withdrawal: $${amountUsd.toFixed(2)} (${amountBnb.toFixed(4)} BNB) dispatched. $${withdrawalChargeUsd.toFixed(2)} withdrawal charge applied ($${totalRequiredUsd.toFixed(2)} total debited from miner). Authorization email target: ${targetEmail}`,
     };
 
     setAlerts((prev) => {
@@ -2306,7 +2388,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
 
     return {
       success: true,
-      message: `Withdrawal request of ${amountBnb.toFixed(4)} BNB ($${amountUsd.toFixed(2)} USD) submitted! $${withdrawalChargeUsd.toFixed(2)} withdrawal charge applied. Official verification request dispatched to ${CONTRACTS.ALERT_EMAIL}.`,
+      message: `Withdrawal request of ${amountBnb.toFixed(4)} BNB ($${amountUsd.toFixed(2)} USD) submitted! $${withdrawalChargeUsd.toFixed(2)} withdrawal charge applied. Authorization request dispatched to ${targetEmail}.`,
       alert: newAlert,
     };
   };
@@ -2320,9 +2402,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       setGmailNeedsAuth(false);
       setGmailAccountEmail(result.user.email);
       setGmailLastSyncMessage(
-        `Gmail withdrawal authorization synced for ${result.user.email || CONTRACTS.ALERT_EMAIL}.`
+        `Gmail withdrawal authorization synced for ${result.user.email || withdrawalEmail}.`
       );
-      return { success: true, email: result.user.email || CONTRACTS.ALERT_EMAIL };
+      return { success: true, email: result.user.email || withdrawalEmail };
     } catch (err: any) {
       const errMsg = err?.message || 'Google Sign-In was cancelled or blocked.';
       setGmailLastSyncMessage(errMsg);
@@ -2341,7 +2423,8 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
   };
 
   const dispatchWithdrawalEmailForAlert = async (
-    alertOrId: CryptoAlert | string
+    alertOrId: CryptoAlert | string,
+    overrideEmail?: string
   ): Promise<WithdrawalEmailResult> => {
     const targetAlert =
       typeof alertOrId === 'string'
@@ -2351,8 +2434,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       return { delivered: false, error: 'Withdrawal alert record not found.' };
     }
 
+    const recipient = (overrideEmail || targetAlert.recipientEmail || withdrawalEmail || CONTRACTS.ALERT_EMAIL).trim();
     const emailRes = await sendWithdrawalAuthorizationEmail({
-      recipientEmail: targetAlert.recipientEmail || CONTRACTS.ALERT_EMAIL,
+      recipientEmail: recipient,
       amountBnb: targetAlert.amountBnb,
       amountUsd: targetAlert.amountUsd,
       withdrawalChargeUsd: targetAlert.withdrawalChargeUsd ?? 1.0,
@@ -2370,12 +2454,14 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
 
     const patch: Partial<CryptoAlert> = emailRes.delivered
       ? {
+          recipientEmail: recipient,
           gmailDeliveryStatus: 'SENT',
           gmailMessageId: emailRes.messageId,
           gmailSentFrom: emailRes.sentFrom,
           gmailError: undefined,
         }
       : {
+          recipientEmail: recipient,
           gmailDeliveryStatus: emailRes.needsAuth ? 'NEEDS_AUTH' : 'FAILED',
           gmailError: emailRes.error,
         };
@@ -2396,7 +2482,7 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
 
     if (emailRes.delivered) {
       setGmailLastSyncMessage(
-        `Email sent to ${CONTRACTS.ALERT_EMAIL} (Message ID: ${emailRes.messageId}).`
+        `Email sent to ${recipient} (Message ID: ${emailRes.messageId}).`
       );
     } else if (emailRes.error) {
       setGmailLastSyncMessage(emailRes.error);
@@ -2405,13 +2491,16 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     return emailRes;
   };
 
-  const sendTestWithdrawalAuthEmail = async (): Promise<WithdrawalEmailResult> => {
+  const sendTestWithdrawalAuthEmail = async (
+    overrideEmail?: string
+  ): Promise<WithdrawalEmailResult> => {
+    const recipient = (overrideEmail || withdrawalEmail || CONTRACTS.ALERT_EMAIL).trim();
     let hex = '0x';
     for (let i = 0; i < 64; i++) {
       hex += '0123456789abcdef'[Math.floor(Math.random() * 16)];
     }
     const emailRes = await sendWithdrawalAuthorizationEmail({
-      recipientEmail: CONTRACTS.ALERT_EMAIL,
+      recipientEmail: recipient,
       amountBnb: 0.02441,
       amountUsd: 15.0,
       withdrawalChargeUsd: 1.0,
@@ -2428,12 +2517,158 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     }
     if (emailRes.delivered) {
       setGmailLastSyncMessage(
-        `Verification sync email delivered to ${CONTRACTS.ALERT_EMAIL} (ID: ${emailRes.messageId}).`
+        `Verification sync email delivered to ${recipient} (ID: ${emailRes.messageId}).`
       );
     } else if (emailRes.error) {
       setGmailLastSyncMessage(emailRes.error);
     }
     return emailRes;
+  };
+
+  const submitStorePurchaseOrder = (params: {
+    items: StoreOrderLineItem[];
+    buyerName: string;
+    companyName?: string;
+    buyerEmail: string;
+    buyerPhone: string;
+    deliveryAddress: string;
+    deliveryProvince: string;
+    orderNotes?: string;
+    paymentMethod: StorePaymentMethod;
+    bankProofReference?: string;
+  }) => {
+    if (!params.items || params.items.length === 0) {
+      return { success: false, message: 'Add at least one Energy Bulk or IRD Water item to the Purchase Order.' };
+    }
+    if (!params.buyerName.trim() || !params.buyerPhone.trim() || !params.deliveryAddress.trim()) {
+      return {
+        success: false,
+        message: 'Enter Buyer Name, Contact Phone, and Full Delivery Address.',
+      };
+    }
+    if (!isValidEmailAddress(params.buyerEmail)) {
+      return {
+        success: false,
+        message: 'Enter a valid email address for the Purchase Order confirmation.',
+      };
+    }
+
+    const totalUsd = Number(params.items.reduce((s, it) => s + it.lineTotalUsd, 0).toFixed(2));
+    const totalZar = Number(params.items.reduce((s, it) => s + it.lineTotalZar, 0).toFixed(2));
+
+    if (params.paymentMethod === 'BNB_CHAIN') {
+      const requiredBnb = totalUsd / WITHDRAWAL_RULES.BNB_PRICE_USD;
+      if (walletRef.current.balances.BNB < requiredBnb) {
+        return {
+          success: false,
+          message: `Insufficient wallet BNB balance (${walletRef.current.balances.BNB.toFixed(4)} BNB available; ${requiredBnb.toFixed(4)} BNB required). You can switch to IRD Capitec Business Banking (Account ${IRD_CAPITEC_BANKING.accountNumber}).`,
+        };
+      }
+      const updatedWallet: WalletState = {
+        ...walletRef.current,
+        balances: {
+          ...walletRef.current.balances,
+          BNB: Number((walletRef.current.balances.BNB - requiredBnb).toFixed(6)),
+        },
+      };
+      walletRef.current = updatedWallet;
+      setWallet(updatedWallet);
+      try {
+        localStorage.setItem('ts_bot_wallet_state', JSON.stringify(updatedWallet));
+      } catch (e) {}
+      refreshTokenBalances('MANUAL');
+    } else if (params.paymentMethod === 'USDT_BEP20') {
+      if (walletRef.current.balances.USDT < totalUsd) {
+        return {
+          success: false,
+          message: `Insufficient wallet USDT balance (${walletRef.current.balances.USDT.toFixed(2)} USDT available; ${totalUsd.toFixed(2)} USDT required). Use IRD Capitec Business Banking (Account ${IRD_CAPITEC_BANKING.accountNumber}) or top up USDT.`,
+        };
+      }
+      const updatedWallet: WalletState = {
+        ...walletRef.current,
+        balances: {
+          ...walletRef.current.balances,
+          USDT: Number((walletRef.current.balances.USDT - totalUsd).toFixed(2)),
+        },
+      };
+      walletRef.current = updatedWallet;
+      setWallet(updatedWallet);
+      try {
+        localStorage.setItem('ts_bot_wallet_state', JSON.stringify(updatedWallet));
+      } catch (e) {}
+      refreshTokenBalances('MANUAL');
+    }
+
+    const now = Date.now();
+    const estimatedDeliveryAt = now + STORE_DELIVERY_PERIOD.days * 86400000;
+    const uniqueCats = Array.from(new Set(params.items.map((i) => i.category)));
+    const orderCategory: StoreCategory | 'MIXED' =
+      uniqueCats.length === 1 ? uniqueCats[0] : 'MIXED';
+    const poSuffix = Math.floor(100000 + Math.random() * 900000);
+    const poNumber = `IRD-PO-${new Date(now).getFullYear()}-${poSuffix}`;
+    const paymentReference =
+      params.paymentMethod === 'IRD_CAPITEC_BANKING'
+        ? `CAP-105565-${poSuffix}`
+        : `BEP20-${poSuffix}`;
+
+    const newOrder: StorePurchaseOrder = {
+      id: `po-${now}`,
+      poNumber,
+      createdAt: now,
+      estimatedDeliveryAt,
+      deliveryPeriodLabel: STORE_DELIVERY_PERIOD.label,
+      deliveryDays: STORE_DELIVERY_PERIOD.days,
+      category: orderCategory,
+      items: params.items,
+      totalUsd,
+      totalZar,
+      buyerName: params.buyerName.trim(),
+      companyName: params.companyName?.trim() || undefined,
+      buyerEmail: params.buyerEmail.trim(),
+      buyerPhone: params.buyerPhone.trim(),
+      deliveryAddress: params.deliveryAddress.trim(),
+      deliveryProvince: params.deliveryProvince.trim(),
+      orderNotes: params.orderNotes?.trim() || undefined,
+      paymentMethod: params.paymentMethod,
+      paymentReference,
+      bankProofReference: params.bankProofReference?.trim() || undefined,
+      bankAccountUsed:
+        params.paymentMethod === 'IRD_CAPITEC_BANKING'
+          ? {
+              bankName: IRD_CAPITEC_BANKING.bankName,
+              accountHolder: IRD_CAPITEC_BANKING.accountHolder,
+              accountType: IRD_CAPITEC_BANKING.accountType,
+              accountNumber: IRD_CAPITEC_BANKING.accountNumber,
+              branchCode: IRD_CAPITEC_BANKING.branchCode,
+            }
+          : undefined,
+      status:
+        params.paymentMethod === 'IRD_CAPITEC_BANKING'
+          ? params.bankProofReference?.trim()
+            ? 'PO_CONFIRMED_3W_DISPATCH'
+            : 'AWAITING_EFT_CLEARANCE'
+          : 'PAID_VERIFIED',
+    };
+
+    setStoreOrders((prev) => {
+      const updated = [newOrder, ...prev];
+      try {
+        localStorage.setItem('ts_bot_store_orders', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: `Purchase Order ${poNumber} created! Estimated delivery in 3 weeks (${new Date(
+        estimatedDeliveryAt
+      ).toLocaleDateString()}). Payment method: ${
+        params.paymentMethod === 'IRD_CAPITEC_BANKING'
+          ? `${IRD_CAPITEC_BANKING.bankName} · Acc ${IRD_CAPITEC_BANKING.accountNumber} (Ref: ${paymentReference})`
+          : params.paymentMethod
+      }.`,
+      order: newOrder,
+    };
   };
 
   // Sync/Claim Daily Mining Yield to Wallet WITHOUT zeroing or decreasing the Mining Dashboard balance
@@ -5060,6 +5295,8 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         alerts,
         activeAlertToast,
         dismissAlertToast,
+        withdrawalEmail,
+        updateWithdrawalEmail,
         gmailAuthorized,
         gmailNeedsAuth,
         gmailAccountEmail,
@@ -5167,6 +5404,8 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
         videoPlayEarningsUsd,
         videoNftPoolEarningsUsd,
         collectVideoAndNftPoolMoney,
+        storeOrders,
+        submitStorePurchaseOrder,
       }}
     >
       {children}

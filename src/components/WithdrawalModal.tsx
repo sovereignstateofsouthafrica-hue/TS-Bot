@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useProtocol } from '../context/ProtocolContext';
 import { CONTRACTS, WITHDRAWAL_RULES, formatUSD, shortenAddress } from '../data/constants';
+import { isValidEmailAddress } from '../utils/gmailAuth';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
 interface WithdrawalModalProps {
@@ -33,6 +34,8 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
     accumulatedMiningYieldBnb,
     addMinedYieldBnb,
     refreshTokenBalances,
+    withdrawalEmail,
+    updateWithdrawalEmail,
     gmailAuthorized,
     gmailNeedsAuth,
     gmailAccountEmail,
@@ -52,6 +55,9 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
   const [withdrawSource, setWithdrawSource] = useState<'miner' | 'wallet'>('miner');
   const [withdrawBnbAmount, setWithdrawBnbAmount] = useState<string>(minWithdrawalBnb.toFixed(4));
   const [recipientAddress, setRecipientAddress] = useState<string>(defaultRecipientAddress || '');
+  const [recipientEmailInput, setRecipientEmailInput] = useState<string>(
+    withdrawalEmail || CONTRACTS.ALERT_EMAIL
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -63,7 +69,10 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
     if (isOpen && defaultRecipientAddress) {
       setRecipientAddress(defaultRecipientAddress);
     }
-  }, [isOpen, defaultRecipientAddress]);
+    if (isOpen) {
+      setRecipientEmailInput(withdrawalEmail || CONTRACTS.ALERT_EMAIL);
+    }
+  }, [isOpen, defaultRecipientAddress, withdrawalEmail]);
 
   if (!isOpen) return null;
 
@@ -151,6 +160,15 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
       return;
     }
 
+    const trimmedEmail = recipientEmailInput.trim();
+    if (!isValidEmailAddress(trimmedEmail)) {
+      setErrorMsg(
+        `Please enter a valid withdrawal email address (e.g. ${CONTRACTS.ALERT_EMAIL}).`
+      );
+      return;
+    }
+    updateWithdrawalEmail(trimmedEmail);
+
     setErrorMsg(null);
     setPendingConfirm(true);
   };
@@ -159,6 +177,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
     const amount = parseFloat(withdrawBnbAmount);
     if (isNaN(amount) || amount <= 0) return;
 
+    const targetEmail = recipientEmailInput.trim() || withdrawalEmail || CONTRACTS.ALERT_EMAIL;
     setIsSubmitting(true);
     setErrorMsg(null);
 
@@ -168,12 +187,13 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
       `BNB Withdrawal of ${amount.toFixed(4)} BNB ($${(amount * bnbPrice).toFixed(2)}) processed via ${
         withdrawSource === 'miner' ? 'Unified TS BOT & IRD Miner' : 'Wallet Balance'
       }. $${withdrawalChargeUsd.toFixed(2)} withdrawal charge applied.`,
-      withdrawSource
+      withdrawSource,
+      targetEmail
     );
 
     if (res.success && res.alert) {
       refreshTokenBalances('WITHDRAWAL');
-      const emailRes = await dispatchWithdrawalEmailForAlert(res.alert);
+      const emailRes = await dispatchWithdrawalEmailForAlert(res.alert, targetEmail);
       setReceipt({
         ...res.alert,
         gmailDeliveryStatus: emailRes.delivered
@@ -355,14 +375,14 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                   {numAmountBnb.toFixed(4)} BNB ({formatUSD(numAmountUsd)})
                 </strong>{' '}
                 and send an official authorization email to{' '}
-                <strong className="text-amber-300 font-mono">{CONTRACTS.ALERT_EMAIL}</strong>.
+                <strong className="text-amber-300 font-mono">{recipientEmailInput.trim()}</strong>.
               </p>
             </div>
 
             <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2 font-mono text-[11px]">
               <div className="flex justify-between">
                 <span className="text-zinc-500">Email Recipient:</span>
-                <span className="text-amber-300 font-bold">{CONTRACTS.ALERT_EMAIL}</span>
+                <span className="text-amber-300 font-bold">{recipientEmailInput.trim()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-500">Email Subject:</span>
@@ -391,8 +411,8 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                 </div>
                 <div className="text-[11px] text-zinc-400 mt-0.5">
                   {gmailAuthorized
-                    ? `Sending as ${gmailAccountEmail || CONTRACTS.ALERT_EMAIL}`
-                    : `Sign in with Google (${CONTRACTS.ALERT_EMAIL}) so the email arrives in your inbox.`}
+                    ? `Sending as ${gmailAccountEmail || recipientEmailInput.trim()}`
+                    : `Sign in with Google (${recipientEmailInput.trim()}) so the email arrives in your inbox.`}
                 </div>
               </div>
               {gmailNeedsAuth && (
@@ -440,30 +460,66 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
               </div>
             )}
 
-            {/* Gmail Authorization Sync Status Banner */}
-            <div className="p-3.5 rounded-2xl bg-zinc-950 border border-amber-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="space-y-0.5">
-                <div className="font-bold text-white flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Email Authorization: {CONTRACTS.ALERT_EMAIL}</span>
+            {/* Gmail Authorization Sync Status Banner & Editable Email */}
+            <div className="p-3.5 rounded-2xl bg-zinc-950 border border-amber-500/35 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Withdrawal Authorization Email</span>
+                  </div>
+                  <div className="text-[11px] text-zinc-400">
+                    {gmailAuthorized
+                      ? `Gmail synced (${gmailAccountEmail || recipientEmailInput}) — live emails enabled`
+                      : 'Sign in with Google to receive live withdrawal authorization emails'}
+                  </div>
                 </div>
-                <div className="text-[11px] text-zinc-400">
-                  {gmailAuthorized
-                    ? `Gmail synced (${gmailAccountEmail || CONTRACTS.ALERT_EMAIL}) — real emails enabled`
-                    : 'Sign in with Google to receive live withdrawal authorization emails'}
-                </div>
+                {gmailNeedsAuth ? (
+                  <GoogleSignInButton
+                    onClick={() => connectGmailAuthorization()}
+                    disabled={isGmailSigningIn}
+                    label={isGmailSigningIn ? 'Connecting...' : 'Sign in with Google'}
+                  />
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/35 font-mono text-[10px] font-bold shrink-0">
+                    GMAIL SYNCED
+                  </span>
+                )}
               </div>
-              {gmailNeedsAuth ? (
-                <GoogleSignInButton
-                  onClick={() => connectGmailAuthorization()}
-                  disabled={isGmailSigningIn}
-                  label={isGmailSigningIn ? 'Connecting...' : 'Sign in with Google'}
+
+              <div className="pt-2 border-t border-zinc-800/80 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <label className="text-[11px] text-zinc-300 font-semibold">
+                    Withdrawal Email Address
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setRecipientEmailInput(CONTRACTS.ALERT_EMAIL)}
+                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 cursor-pointer"
+                    >
+                      Use Default ({CONTRACTS.ALERT_EMAIL})
+                    </button>
+                    {gmailAccountEmail && gmailAccountEmail !== recipientEmailInput && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipientEmailInput(gmailAccountEmail)}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 cursor-pointer"
+                      >
+                        Use {gmailAccountEmail}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="email"
+                  value={recipientEmailInput}
+                  onChange={(e) => setRecipientEmailInput(e.target.value)}
+                  placeholder={CONTRACTS.ALERT_EMAIL}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-500"
+                  required
                 />
-              ) : (
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/35 font-mono text-[10px] font-bold shrink-0">
-                  GMAIL SYNCED
-                </span>
-              )}
+              </div>
             </div>
 
             {/* Source Selection Tabs */}
